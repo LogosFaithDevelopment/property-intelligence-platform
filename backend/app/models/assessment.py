@@ -3,12 +3,13 @@ Assessment Model
 Represents the evaluation process and results for a property
 """
 
-from sqlalchemy import Column, String, Integer, Float, Text, Boolean, DateTime, ForeignKey, Enum, JSON
-from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
 import enum
 
 from app.models.base import BaseModel, UUIDMixin
+from sqlalchemy import (JSON, Boolean, Column, DateTime, Enum, Float,
+                        ForeignKey, Integer, String, Text)
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 
 
 class AssessmentStatus(str, enum.Enum):
@@ -40,7 +41,7 @@ class Assessment(BaseModel, UUIDMixin):
     property_id = Column(Integer, ForeignKey("properties.id"), nullable=False)
     
     church = relationship("Church", back_populates="assessments")
-    property = relationship("Property", back_populates="assessments")
+    property_obj = relationship("Property", back_populates="assessments")
     
     # Assessment Metadata
     status = Column(Enum(AssessmentStatus), default=AssessmentStatus.DRAFT, nullable=False)

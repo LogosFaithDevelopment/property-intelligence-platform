@@ -3,18 +3,18 @@ Reports Router
 Handle investment report generation and delivery
 """
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
-from fastapi.responses import StreamingResponse
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
-from typing import Optional
 import io
 import logging
+from typing import Optional
 
 from app.database import get_db
-from app.models.report import Report, ReportType, ReportFormat, ReportStatus
 from app.models.assessment import Assessment
+from app.models.report import Report, ReportFormat, ReportStatus, ReportType
 from app.schemas.base import SuccessResponse
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
+from sqlalchemy import and_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -24,9 +24,9 @@ router = APIRouter()
 async def generate_report(
     assessment_id: int,
     report_type: ReportType,
-    report_format: ReportFormat = ReportFormat.PDF,
     background_tasks: BackgroundTasks,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    report_format: ReportFormat = ReportFormat.PDF
 ):
     """
     Generate an investment report for an assessment

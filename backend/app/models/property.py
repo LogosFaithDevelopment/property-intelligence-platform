@@ -3,12 +3,13 @@ Property Model
 Represents physical properties owned by churches
 """
 
-from sqlalchemy import Column, String, Integer, Float, Text, Boolean, DateTime, ForeignKey, Enum
-from sqlalchemy.orm import relationship
-from geoalchemy2 import Geography
 import enum
 
-from app.models.base import BaseModel, UUIDMixin, SoftDeleteMixin
+from app.models.base import BaseModel, SoftDeleteMixin, UUIDMixin
+from geoalchemy2 import Geography
+from sqlalchemy import (Boolean, Column, DateTime, Enum, Float, ForeignKey,
+                        Integer, String, Text)
+from sqlalchemy.orm import relationship
 
 
 class PropertyType(str, enum.Enum):
@@ -101,7 +102,7 @@ class Property(BaseModel, UUIDMixin, SoftDeleteMixin):
     last_data_update = Column(DateTime(timezone=True), nullable=True)
     
     # Relationships
-    assessments = relationship("Assessment", back_populates="property", cascade="all, delete-orphan")
+    assessments = relationship("Assessment", back_populates="property_obj", cascade="all, delete-orphan")
     
     def __repr__(self):
         return f"<Property(id={self.id}, address='{self.street_address}', type='{self.property_type}')>"

@@ -3,20 +3,21 @@ Properties Router
 CRUD operations for property management and data enrichment
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, or_
-from typing import List, Optional
 import logging
+from typing import List, Optional
 
 from app.database import get_db
-from app.models.property import Property, PropertyType, ZoningType
 from app.models.church import Church
-from app.schemas.property import (
-    PropertyCreate, PropertyUpdate, PropertyResponse, PropertySummary,
-    PropertyEnrichment, PropertyAnalytics
-)
-from app.schemas.base import PaginatedResponse, PaginationParams, SuccessResponse
+from app.models.property import Property, PropertyType, ZoningType
+from app.schemas.base import (PaginatedResponse, PaginationParams,
+                              SuccessResponse)
+from app.schemas.property import (PropertyAnalytics, PropertyCreate,
+                                  PropertyEnrichment, PropertyResponse,
+                                  PropertySummary, PropertyUpdate)
+from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException, Query,
+                     status)
+from sqlalchemy import and_, func, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -271,14 +272,19 @@ async def update_property(
 @router.post("/{property_id}/enrich", response_model=SuccessResponse)
 async def enrich_property(
     property_id: int,
-    background_tasks: BackgroundTasks,
     force_refresh: bool = Query(False, description="Force refresh cached data"),
+    use_premium_apis: bool = Query(False, description="Use premium APIs (Google, ATTOM)"),
     db: AsyncSession = Depends(get_db)
 ):
     """
     Trigger property data enrichment from external APIs
+    
+    Fetches additional data from Census, FEMA, HUD, and optionally Google Maps/ATTOM Data
     """
     try:
+        # Import service
+        from app.services.property_enrichment import PropertyEnrichmentService
+
         # Verify property exists
         stmt = select(Property).where(
             and_(Property.id == property_id, Property.is_active == True)
@@ -292,10 +298,18 @@ async def enrich_property(
                 detail="Property not found"
             )
         
-        # Schedule enrichment task
-        background_tasks.add_task(enrich_property_data, property_id, force_refresh)
+        # Run enrichment service
+        enrichment_service = PropertyEnrichmentService(db)
+        enrichment_results = await enrichment_service.enrich_property(
+            property_id=property_id,
+            use_premium_apis=use_premium_apis,
+            force_refresh=force_refresh
+        )
         
-        return SuccessResponse(message="Property enrichment started")
+        return SuccessResponse(
+            message="Property enrichment completed",
+            data=enrichment_results
+        )
         
     except HTTPException:
         raise
@@ -474,16 +488,16 @@ async def get_property_analytics(
 async def enrich_property_data(property_id: int, force_refresh: bool = False):
     """
     Background task to enrich property data from external APIs
-    This will be implemented with actual API calls in the services layer
     """
     logger.info(f"Starting property enrichment for property {property_id} (force_refresh={force_refresh})")
     
-    # TODO: Implement actual API calls to:
-    # - Census API for demographics
-    # - HUD Exchange for housing data
-    # - FEMA for flood risk
-    # - ATTOM Data for property details (when available)
-    # - Google Maps for location data
-    
-    # For now, just log the task
-    logger.info(f"Property enrichment completed for property {property_id}")
+    try:
+        from app.database import AsyncSessionLocal
+        from app.services.property_enrichment import PropertyEnrichmentService
+        
+        async with AsyncSessionLocal() as db:
+            service = PropertyEnrichmentService(db)
+            result = await service.enrich_property(property_id, use_premium_apis=False, force_refresh=force_refresh)
+            logger.info(f"Property enrichment completed for property {property_id}: {result.get('status')}")
+    except Exception as e:
+        logger.error(f"Property enrichment failed for property {property_id}: {e}", exc_info=True)

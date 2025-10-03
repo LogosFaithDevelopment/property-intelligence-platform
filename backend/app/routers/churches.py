@@ -3,22 +3,22 @@ Churches Router
 CRUD operations for church/organization management
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, or_
-from sqlalchemy.orm import selectinload
-from typing import List, Optional
 import logging
+from typing import List, Optional
 
 from app.database import get_db
+from app.models.assessment import Assessment
 from app.models.church import Church, ChurchStatus
 from app.models.property import Property
-from app.models.assessment import Assessment
-from app.schemas.church import (
-    ChurchCreate, ChurchUpdate, ChurchResponse, ChurchSummary, 
-    ChurchVerification, ChurchStats
-)
-from app.schemas.base import PaginatedResponse, PaginationParams, SuccessResponse
+from app.schemas.base import (PaginatedResponse, PaginationParams,
+                              SuccessResponse)
+from app.schemas.church import (ChurchCreate, ChurchResponse, ChurchStats,
+                                ChurchSummary, ChurchUpdate,
+                                ChurchVerification)
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import and_, func, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

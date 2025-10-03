@@ -3,20 +3,21 @@ FastAPI Application Entry Point
 Property Intelligence Platform Backend
 """
 
+import logging
+import sys
+from contextlib import asynccontextmanager
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from contextlib import asynccontextmanager
-import logging
-import sys
-from pathlib import Path
 
 # Add the app directory to Python path
 sys.path.append(str(Path(__file__).parent))
 
 from app.config import get_settings
-from app.database import engine, create_tables
-from app.routers import auth, churches, properties, assessments, reports
+from app.database import create_tables, engine
+from app.routers import assessments, auth, churches, properties, reports
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

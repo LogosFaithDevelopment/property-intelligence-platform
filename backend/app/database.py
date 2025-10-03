@@ -3,13 +3,14 @@ Database Configuration and Setup
 SQLAlchemy 2.0 with async support and PostGIS for geospatial queries
 """
 
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import MetaData, event
-from sqlalchemy.engine import Engine
 import logging
 
 from app.config import get_settings
+from sqlalchemy import MetaData, event, text
+from sqlalchemy.engine import Engine
+from sqlalchemy.ext.asyncio import (AsyncSession, async_sessionmaker,
+                                    create_async_engine)
+from sqlalchemy.ext.declarative import declarative_base
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -46,11 +47,11 @@ async def create_tables():
     """Create all database tables"""
     async with engine.begin() as conn:
         # Enable PostGIS extension
-        await conn.execute("CREATE EXTENSION IF NOT EXISTS postgis;")
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis;"))
         
         # Import all models to ensure they're registered
-        from app.models import church, property, assessment, report, api_cache
-        
+        from app.models import api_cache, assessment, church, property, report
+
         # Create all tables
         await conn.run_sync(Base.metadata.create_all)
         

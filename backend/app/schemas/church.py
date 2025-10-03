@@ -3,12 +3,13 @@ Church Pydantic Schemas
 Request/response schemas for church-related endpoints
 """
 
-from pydantic import Field, EmailStr, HttpUrl, validator
-from typing import Optional, List
 from datetime import datetime
+from typing import List, Optional
 
-from app.schemas.base import BaseSchema, TimestampMixin, UUIDMixin, AddressSchema
 from app.models.church import ChurchStatus
+from app.schemas.base import (AddressSchema, BaseSchema, TimestampMixin,
+                              UUIDMixin)
+from pydantic import EmailStr, Field, HttpUrl, validator
 
 
 class ChurchBase(BaseSchema):

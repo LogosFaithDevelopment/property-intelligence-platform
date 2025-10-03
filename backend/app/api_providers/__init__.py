@@ -3,8 +3,8 @@ API Providers package initialization
 Unified access to all API providers with automatic fallback
 """
 
-from typing import Dict, Any, Optional
 import logging
+from typing import Any, Dict, Optional
 
 from app.api_providers.free_providers import get_free_providers
 from app.api_providers.professional_providers import get_professional_providers
