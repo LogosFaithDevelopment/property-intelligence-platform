@@ -73,15 +73,8 @@ async def create_property(
         await db.commit()
         await db.refresh(property_obj)
         
-        # Run enrichment synchronously (quick fix - will move to background tasks later)
-        logger.info(f"Starting synchronous enrichment for property {property_obj.id}")
-        try:
-            await enrich_property_data(property_obj.id, db)
-            await db.refresh(property_obj)
-            logger.info(f"Property enrichment completed for {property_obj.id}")
-        except Exception as e:
-            logger.error(f"Enrichment failed for property {property_obj.id}: {e}")
-            # Don't fail the request, enrichment can be retried
+        # Schedule background data enrichment
+        background_tasks.add_task(enrich_property_data, property_obj.id)
         
         logger.info(f"Created property: {property_obj.full_address} (ID: {property_obj.id})")
         return property_obj
@@ -492,18 +485,19 @@ async def get_property_analytics(
         )
 
 
-async def enrich_property_data(property_id: int, db: AsyncSession, force_refresh: bool = False):
+async def enrich_property_data(property_id: int, force_refresh: bool = False):
     """
-    Enrich property data from external APIs (synchronous for quick testing)
+    Background task to enrich property data from external APIs
+    This will be implemented with actual API calls in the services layer
     """
-    from app.services.property_enrichment import PropertyEnrichmentService
-    
     logger.info(f"Starting property enrichment for property {property_id} (force_refresh={force_refresh})")
     
-    try:
-        service = PropertyEnrichmentService(db)
-        result = await service.enrich_property(property_id, use_premium_apis=False, force_refresh=force_refresh)
-        logger.info(f"Property enrichment completed for property {property_id}: {result.get('status')}")
-        return result
-    except Exception as e:
-        logger.error(f"Property enrichment failed for property {property_id}: {e}", exc_info=True)
+    # TODO: Implement actual API calls to:
+    # - Census API for demographics
+    # - HUD Exchange for housing data
+    # - FEMA for flood risk
+    # - ATTOM Data for property details (when available)
+    # - Google Maps for location data
+    
+    # For now, just log the task
+    logger.info(f"Property enrichment completed for property {property_id}")

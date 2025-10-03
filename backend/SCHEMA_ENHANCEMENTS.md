@@ -1,5 +1,4 @@
 # Assessment Schema Enhancements
-
 ## Logos-Specific API Response Fields
 
 **Date:** October 3, 2025  
@@ -24,17 +23,15 @@ A structured schema for Logos-specific financial analysis data.
 **Fields:**
 
 #### Lot Size Validation
-
 ```python
 lot_size_sqft: Optional[float]           # Lot size in square feet
-lot_size_acres: Optional[float]          # Lot size in acres
+lot_size_acres: Optional[float]          # Lot size in acres  
 meets_minimum: Optional[bool]            # ✅ Meets 10,000 sq ft minimum?
 disqualified: Optional[bool]             # ❌ Property disqualified?
 disqualification_reason: Optional[str]   # Why property was disqualified
 ```
 
 #### Unit Capacity Analysis
-
 ```python
 feasible_units: Optional[int]            # Calculated feasible unit count
 within_target_range: Optional[bool]      # ✅ Within 40-140 unit range?
@@ -43,7 +40,6 @@ units_per_acre_assumed: Optional[int]    # Density assumption (units/acre)
 ```
 
 #### Cost Per Unit Analysis
-
 ```python
 cost_per_unit: Optional[float]           # Estimated cost per unit
 cost_per_unit_formatted: Optional[str]   # e.g., "$285,000"
@@ -52,7 +48,6 @@ under_target: Optional[bool]             # ✅ Under $325K target?
 ```
 
 #### Cost Breakdown
-
 ```python
 building_construction_cost: Optional[float]
 site_work_cost: Optional[float]
@@ -64,7 +59,6 @@ developer_fee: Optional[float]
 ```
 
 #### Project Totals
-
 ```python
 estimated_development_cost: Optional[float]
 estimated_development_cost_formatted: Optional[str]  # e.g., "$27,075,000"
@@ -83,7 +77,6 @@ estimated_development_cost_formatted: Optional[str]  # e.g., "$27,075,000"
 **Description:** Extracts and structures all Logos-specific data from the `financial_projections` JSON field.
 
 **Usage Example:**
-
 ```python
 assessment = await get_assessment(assessment_id)
 metrics = assessment.logos_metrics
@@ -95,7 +88,6 @@ if metrics:
 ```
 
 **API Response:**
-
 ```json
 {
   "id": 1,
@@ -127,13 +119,11 @@ if metrics:
 **Type:** `Dict[str, Any]`
 
 **Description:** Provides a quick pass/fail summary for Logos' three core investment criteria:
-
 1. **Minimum Lot Size** (10,000 sq ft)
 2. **Unit Capacity** (40-140 units)
 3. **Cost Per Unit** (<$325K)
 
 **Usage Example:**
-
 ```python
 assessment = await get_assessment(assessment_id)
 compliance = assessment.logos_compliance_summary
@@ -142,14 +132,13 @@ if compliance["meets_criteria"]:
     print("✅ Property meets all Logos criteria!")
 else:
     print(f"⚠️  {compliance['summary']}")
-
+    
 # Check individual criteria
 for name, details in compliance["criteria"].items():
     print(f"{name}: {details['status']}")
 ```
 
 **API Response (Compliant Property):**
-
 ```json
 {
   "id": 1,
@@ -182,7 +171,6 @@ for name, details in compliance["criteria"].items():
 ```
 
 **API Response (Disqualified Property):**
-
 ```json
 {
   "id": 2,
@@ -195,7 +183,6 @@ for name, details in compliance["criteria"].items():
 ```
 
 **API Response (Partial Compliance):**
-
 ```json
 {
   "id": 3,
@@ -232,7 +219,6 @@ for name, details in compliance["criteria"].items():
 ## 📊 Frontend Integration Examples
 
 ### React Example
-
 ```tsx
 interface LogosMetrics {
   feasible_units?: number;
@@ -254,46 +240,42 @@ interface Assessment {
 
 function AssessmentCard({ assessment }: { assessment: Assessment }) {
   const { logos_metrics, logos_compliance_summary } = assessment;
-
+  
   return (
-    <div className='assessment-card'>
+    <div className="assessment-card">
       <h3>Score: {assessment.overall_score}/100</h3>
-
+      
       {/* Compliance Status */}
       <div className={`status-badge ${logos_compliance_summary.status}`}>
-        {logos_compliance_summary.meets_criteria
-          ? '✅ Meets Logos Criteria'
-          : '⚠️  Does Not Meet Criteria'}
+        {logos_compliance_summary.meets_criteria ? '✅ Meets Logos Criteria' : '⚠️  Does Not Meet Criteria'}
       </div>
-
+      
       {/* Key Metrics */}
       {logos_metrics && (
-        <div className='metrics'>
-          <MetricItem
-            label='Feasible Units'
+        <div className="metrics">
+          <MetricItem 
+            label="Feasible Units" 
             value={logos_metrics.feasible_units}
             status={logos_metrics.within_target_range ? 'pass' : 'warning'}
           />
-          <MetricItem
-            label='Cost Per Unit'
+          <MetricItem 
+            label="Cost Per Unit" 
             value={logos_metrics.cost_per_unit_formatted}
             status={logos_metrics.under_target ? 'pass' : 'warning'}
           />
         </div>
       )}
-
+      
       {/* Detailed Criteria */}
       {logos_compliance_summary.criteria && (
-        <div className='criteria-details'>
-          {Object.entries(logos_compliance_summary.criteria).map(
-            ([key, details]) => (
-              <div key={key} className='criterion'>
-                <span>{details.status}</span>
-                <span>{details.requirement}</span>
-                <span>Actual: {details.actual}</span>
-              </div>
-            )
-          )}
+        <div className="criteria-details">
+          {Object.entries(logos_compliance_summary.criteria).map(([key, details]) => (
+            <div key={key} className="criterion">
+              <span>{details.status}</span>
+              <span>{details.requirement}</span>
+              <span>Actual: {details.actual}</span>
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -302,17 +284,16 @@ function AssessmentCard({ assessment }: { assessment: Assessment }) {
 ```
 
 ### Vue Example
-
 ```vue
 <template>
   <div class="assessment-card">
     <h3>Score: {{ assessment.overall_score }}/100</h3>
-
+    
     <!-- Compliance Badge -->
     <div :class="['status-badge', complianceClass]">
       {{ complianceText }}
     </div>
-
+    
     <!-- Logos Metrics -->
     <div v-if="assessment.logos_metrics" class="metrics-grid">
       <div class="metric">
@@ -321,7 +302,7 @@ function AssessmentCard({ assessment }: { assessment: Assessment }) {
           {{ assessment.logos_metrics.feasible_units }}
         </value>
       </div>
-
+      
       <div class="metric">
         <label>Cost Per Unit</label>
         <value :class="{ success: underTarget }">
@@ -337,24 +318,22 @@ import { computed } from 'vue';
 
 const props = defineProps<{ assessment: Assessment }>();
 
-const complianceClass = computed(() =>
-  props.assessment.logos_compliance_summary.meets_criteria
-    ? 'success'
-    : 'warning'
+const complianceClass = computed(() => 
+  props.assessment.logos_compliance_summary.meets_criteria ? 'success' : 'warning'
 );
 
-const complianceText = computed(() =>
-  props.assessment.logos_compliance_summary.meets_criteria
-    ? '✅ Meets Logos Criteria'
+const complianceText = computed(() => 
+  props.assessment.logos_compliance_summary.meets_criteria 
+    ? '✅ Meets Logos Criteria' 
     : '⚠️  Does Not Meet Criteria'
 );
 
-const withinRange = computed(
-  () => props.assessment.logos_metrics?.within_target_range ?? false
+const withinRange = computed(() => 
+  props.assessment.logos_metrics?.within_target_range ?? false
 );
 
-const underTarget = computed(
-  () => props.assessment.logos_metrics?.under_target ?? false
+const underTarget = computed(() => 
+  props.assessment.logos_metrics?.under_target ?? false
 );
 </script>
 ```
@@ -364,22 +343,17 @@ const underTarget = computed(
 ## 🔄 Migration Notes
 
 ### Backwards Compatibility
-
 ✅ **Fully backwards compatible** - No breaking changes
-
 - Existing API consumers will continue to work
 - New fields are optional computed properties
 - Original `financial_projections` JSON field still available
 
 ### Database Changes
-
 ❌ **No database migrations required**
-
 - All changes are at the schema/serialization layer
 - Existing data automatically supports new properties
 
 ### API Versioning
-
 - Current API version: `v1`
 - No version bump needed (additive changes only)
 
@@ -388,7 +362,6 @@ const underTarget = computed(
 ## 🧪 Testing the Enhanced Schema
 
 ### Using cURL
-
 ```bash
 # Get assessment with Logos metrics
 curl -X GET http://localhost:8000/api/v1/assessments/1 \
@@ -400,7 +373,6 @@ curl -X GET http://localhost:8000/api/v1/assessments/1 \
 ```
 
 ### Using Python
-
 ```python
 import httpx
 
@@ -425,19 +397,16 @@ print(f"Summary: {compliance['summary']}")
 ## 📝 Summary of Changes
 
 ### Files Modified
-
 1. `/backend/app/schemas/assessment.py`
    - Added `LogosFinancialMetrics` schema class
    - Enhanced `AssessmentResponse` with 2 new computed properties
    - ~120 lines of new code
 
 ### New API Fields
-
 - `logos_metrics` - Structured financial metrics
 - `logos_compliance_summary` - Pass/fail compliance summary
 
 ### Benefits
-
 1. ✅ **Easier Frontend Integration** - No JSON parsing needed
 2. ✅ **Type Safety** - Fully typed with Pydantic
 3. ✅ **Self-Documenting** - Clear field names and descriptions

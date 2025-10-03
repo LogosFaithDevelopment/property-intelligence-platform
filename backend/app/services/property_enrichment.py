@@ -325,8 +325,8 @@ class PropertyEnrichmentService:
             
             # Step 3: Fetch Fair Market Rents (FMR)
             # Critical for Logos: Section 8 voucher payment standards
-            logger.info(f"Fetching fair market rents for county {county_fips}")
-            fmr_data = await self._fetch_hud_fair_market_rent(property_obj.zip_code, county_fips)
+            logger.info(f"Fetching fair market rents for ZIP {property_obj.zip_code}")
+            fmr_data = await self._fetch_hud_fair_market_rent(property_obj.zip_code)
             results["fair_market_rent"] = fmr_data
             
             return {
@@ -407,67 +407,60 @@ class PropertyEnrichmentService:
         try:
             # HUD Income Limits API endpoint
             # https://www.huduser.gov/portal/dataset/fmr-api.html
-            # This API requires an entityid (FIPS code), not ZIP code
-            # Format: {state_fips}{county_fips}99999 (e.g., 4802199999 for Travis County, TX)
+            url = "https://www.huduser.gov/hudapi/public/il"
             
-            if not county_fips or len(county_fips) != 5:
-                logger.warning(f"No valid county FIPS available for income limits lookup (got: {county_fips})")
-                return {
-                    "success": False,
-                    "error": "County FIPS required for income limits - USPS crosswalk needed"
-                }
-            
-            # Format entityid: county FIPS + 99999 suffix
-            entityid = f"{county_fips}99999"
-            url = f"https://www.huduser.gov/hudapi/public/il/data/{entityid}"
+            # Try county-based query first (most accurate)
+            if county_fips and len(county_fips) == 5:
+                params = {"entityid": county_fips}
+            else:
+                # Fallback to ZIP code query
+                params = {"zip": zip_code}
             
             headers = {
                 "Authorization": f"Bearer {settings.hud_api_key}"
             }
             
             async with httpx.AsyncClient() as client:
-                response = await client.get(url, headers=headers, timeout=15.0)
+                response = await client.get(url, params=params, headers=headers, timeout=15.0)
                 
                 if response.status_code == 200:
                     data = response.json()
                     
-                    # API response structure has changed - data is directly accessible
-                    # Response format: {"data": {"county_name": "...", "year": "2024", "median_income": 65900, "very_low": {...}, "extremely_low": {...}, "low": {...}}}
-                    if data.get("data"):
-                        response_data = data["data"]
+                    # Extract relevant AMI thresholds for different household sizes
+                    # Focus on 1-4 person households (typical for affordable housing)
+                    if data.get("data") and data["data"].get("income"):
+                        income_data = data["data"]["income"]
                         
-                        # Extract income limits (using the correct field names from API)
-                        extremely_low = response_data.get("extremely_low", {})  # 30% AMI
-                        very_low = response_data.get("very_low", {})  # 50% AMI
-                        low = response_data.get("low", {})  # 80% AMI
-                        
-                        # Note: API doesn't provide 60% AMI directly, need to calculate or use 50%/80% range
+                        # Extract limits for 1-4 person households
                         return {
                             "success": True,
-                            "year": response_data.get("year"),
-                            "area_name": response_data.get("area_name"),
-                            "county_name": response_data.get("county_name"),
-                            "median_income": response_data.get("median_income"),
+                            "year": data["data"].get("year"),
+                            "area_name": data["data"].get("area_name"),
+                            "median_income": data["data"].get("median"),
                             "limits_by_household_size": {
                                 "1_person": {
-                                    "30_percent_ami": extremely_low.get("il30_p1"),
-                                    "50_percent_ami": very_low.get("il50_p1"),
-                                    "80_percent_ami": low.get("il80_p1"),
+                                    "30_percent_ami": income_data.get("l30_1"),
+                                    "50_percent_ami": income_data.get("l50_1"),
+                                    "60_percent_ami": income_data.get("l60_1"),
+                                    "80_percent_ami": income_data.get("l80_1"),
                                 },
                                 "2_person": {
-                                    "30_percent_ami": extremely_low.get("il30_p2"),
-                                    "50_percent_ami": very_low.get("il50_p2"),
-                                    "80_percent_ami": low.get("il80_p2"),
+                                    "30_percent_ami": income_data.get("l30_2"),
+                                    "50_percent_ami": income_data.get("l50_2"),
+                                    "60_percent_ami": income_data.get("l60_2"),
+                                    "80_percent_ami": income_data.get("l80_2"),
                                 },
                                 "3_person": {
-                                    "30_percent_ami": extremely_low.get("il30_p3"),
-                                    "50_percent_ami": very_low.get("il50_p3"),
-                                    "80_percent_ami": low.get("il80_p3"),
+                                    "30_percent_ami": income_data.get("l30_3"),
+                                    "50_percent_ami": income_data.get("l50_3"),
+                                    "60_percent_ami": income_data.get("l60_3"),
+                                    "80_percent_ami": income_data.get("l80_3"),
                                 },
                                 "4_person": {
-                                    "30_percent_ami": extremely_low.get("il30_p4"),
-                                    "50_percent_ami": very_low.get("il50_p4"),
-                                    "80_percent_ami": low.get("il80_p4"),
+                                    "30_percent_ami": income_data.get("l30_4"),
+                                    "50_percent_ami": income_data.get("l50_4"),
+                                    "60_percent_ami": income_data.get("l60_4"),
+                                    "80_percent_ami": income_data.get("l80_4"),
                                 }
                             }
                         }
@@ -487,7 +480,7 @@ class PropertyEnrichmentService:
             logger.error(f"HUD Income Limits error: {str(e)}")
             return {"success": False, "error": str(e)}
     
-    async def _fetch_hud_fair_market_rent(self, zip_code: str, county_fips: Optional[str] = None) -> Dict[str, Any]:
+    async def _fetch_hud_fair_market_rent(self, zip_code: str) -> Dict[str, Any]:
         """
         Fetch Fair Market Rent (FMR) from HUD API
         
@@ -505,47 +498,33 @@ class PropertyEnrichmentService:
         
         try:
             # HUD Fair Market Rent API endpoint
-            # This API requires an entityid (FIPS code), not ZIP code
-            # Format: {state_fips}{county_fips}99999 (e.g., 4802199999 for Travis County, TX)
-            
-            if not county_fips or len(county_fips) != 5:
-                logger.warning(f"No valid county FIPS available for FMR lookup (got: {county_fips})")
-                return {
-                    "success": False,
-                    "error": "County FIPS required for FMR - USPS crosswalk needed"
-                }
-            
-            # Format entityid: county FIPS + 99999 suffix
-            entityid = f"{county_fips}99999"
-            url = f"https://www.huduser.gov/hudapi/public/fmr/data/{entityid}"
-            
+            url = "https://www.huduser.gov/hudapi/public/fmr/data"
+            params = {"zip": zip_code}
             headers = {
                 "Authorization": f"Bearer {settings.hud_api_key}"
             }
             
             async with httpx.AsyncClient() as client:
-                response = await client.get(url, headers=headers, timeout=15.0)
+                response = await client.get(url, params=params, headers=headers, timeout=15.0)
                 
                 if response.status_code == 200:
                     data = response.json()
                     
-                    # API response format: {"data": {"county_name": "...", "basicdata": {"Efficiency": "758", "One-Bedroom": "769", ...}}}
                     if data.get("data") and data["data"].get("basicdata"):
-                        response_data = data["data"]
-                        fmr_data = response_data["basicdata"]
+                        fmr_data = data["data"]["basicdata"]
                         
                         return {
                             "success": True,
                             "year": fmr_data.get("year"),
-                            "area_name": response_data.get("area_name"),
-                            "county_name": response_data.get("county_name"),
-                            "metro_name": response_data.get("metro_name"),
+                            "area_name": fmr_data.get("area_name"),
+                            "metro_code": fmr_data.get("metro_code"),
+                            "county_name": fmr_data.get("county_name"),
                             "rent_by_bedroom": {
-                                "studio": int(float(fmr_data.get("Efficiency", 0))),  # Convert string to int
-                                "1_bedroom": int(float(fmr_data.get("One-Bedroom", 0))),
-                                "2_bedroom": int(float(fmr_data.get("Two-Bedroom", 0))),
-                                "3_bedroom": int(float(fmr_data.get("Three-Bedroom", 0))),
-                                "4_bedroom": int(float(fmr_data.get("Four-Bedroom", 0)))
+                                "studio": fmr_data.get("rent_0br"),  # Efficiency/studio
+                                "1_bedroom": fmr_data.get("rent_1br"),
+                                "2_bedroom": fmr_data.get("rent_2br"),
+                                "3_bedroom": fmr_data.get("rent_3br"),
+                                "4_bedroom": fmr_data.get("rent_4br")
                             },
                             # Calculate affordable rent limits (30% of income rule)
                             "logos_notes": {

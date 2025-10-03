@@ -1,10 +1,8 @@
 # HUD API Integration - Phase 1.5
-
 ## Section 8 Viability & AMI Analysis for Logos Faith Development
 
 **Date:** October 3, 2025  
 **Files Modified:**
-
 - `/backend/app/services/property_enrichment.py`
 - `/backend/app/services/ai_assessment.py`
 
@@ -21,7 +19,6 @@ Integrated HUD (U.S. Department of Housing and Urban Development) APIs to valida
 ## 🔌 APIs Integrated
 
 ### 1. **HUD USPS Crosswalk API**
-
 **Endpoint:** `https://www.huduser.gov/hudapi/public/usps`
 
 **Purpose:** Maps ZIP codes to Census tracts and counties
@@ -31,15 +28,14 @@ Integrated HUD (U.S. Department of Housing and Urban Development) APIs to valida
 **Implementation:** `_fetch_hud_usps_crosswalk()`
 
 **Example Response:**
-
 ```json
 {
   "year": "2024",
   "quarter": "Q3",
   "results": [
     {
-      "geoid": "48453001100", // State(48) + County(453) + Tract
-      "res_ratio": 0.92, // 92% of addresses
+      "geoid": "48453001100",  // State(48) + County(453) + Tract
+      "res_ratio": 0.92,       // 92% of addresses
       "tot_ratio": 0.89
     }
   ]
@@ -49,13 +45,11 @@ Integrated HUD (U.S. Department of Housing and Urban Development) APIs to valida
 ---
 
 ### 2. **HUD Income Limits API**
-
 **Endpoint:** `https://www.huduser.gov/hudapi/public/il`
 
 **Purpose:** Get Area Median Income (AMI) thresholds for affordability targeting
 
 **Why Critical for Logos:**
-
 - Determines tenant eligibility (60-80% AMI target)
 - Validates affordability assumptions
 - Required for California Welfare Tax exemption calculations
@@ -63,14 +57,12 @@ Integrated HUD (U.S. Department of Housing and Urban Development) APIs to valida
 **Implementation:** `_fetch_hud_income_limits()`
 
 **Data Retrieved:**
-
 - 30% AMI (Extremely Low Income)
-- 50% AMI (Very Low Income)
+- 50% AMI (Very Low Income)  
 - 60% AMI (Logos lower bound)
 - 80% AMI (Logos upper bound - primary target)
 
 **Example Response:**
-
 ```json
 {
   "year": 2024,
@@ -102,7 +94,6 @@ Integrated HUD (U.S. Department of Housing and Urban Development) APIs to valida
 ```
 
 **Scoring Impact:**
-
 - **Ideal AMI (80% for 2-person: $50K-$80K):** +5 points
 - **Acceptable AMI ($40K-$50K or $80K-$100K):** +2 points
 - **Challenging AMI (outside ranges):** -5 points
@@ -110,13 +101,11 @@ Integrated HUD (U.S. Department of Housing and Urban Development) APIs to valida
 ---
 
 ### 3. **HUD Fair Market Rent (FMR) API**
-
 **Endpoint:** `https://www.huduser.gov/hudapi/public/fmr/data`
 
 **Purpose:** Get Section 8 Housing Choice Voucher payment standards
 
 **Why CRITICAL for Logos:**
-
 - **FMR = Maximum rent for Section 8 vouchers**
 - Logos' model depends on Section 8 tenants
 - If FMR is too low, project economics fail
@@ -125,7 +114,6 @@ Integrated HUD (U.S. Department of Housing and Urban Development) APIs to valida
 **Implementation:** `_fetch_hud_fair_market_rent()`
 
 **Data Retrieved:**
-
 - Studio (0 BR) FMR
 - 1 Bedroom FMR
 - 2 Bedroom FMR (most important for Logos)
@@ -133,7 +121,6 @@ Integrated HUD (U.S. Department of Housing and Urban Development) APIs to valida
 - 4 Bedroom FMR
 
 **Example Response:**
-
 ```json
 {
   "year": 2024,
@@ -155,7 +142,6 @@ Integrated HUD (U.S. Department of Housing and Urban Development) APIs to valida
 ```
 
 **Scoring Impact:**
-
 - **High FMR (2BR ≥ $2000):** +10 points (excellent)
 - **Moderate FMR (2BR $1500-$2000):** +5 points (good)
 - **Marginal FMR (2BR $1200-$1500):** 0 points (tight margins)
@@ -174,7 +160,6 @@ The market analysis now includes **two new Logos-specific scoring components**:
 **Purpose:** Validates that Section 8 voucher payments support project economics
 
 **Algorithm:**
-
 ```python
 if 2BR_FMR >= $2000:
     score += 10  # Excellent - strong rent support
@@ -187,14 +172,12 @@ else:
 ```
 
 **Additional Metrics Calculated:**
-
 - Annual rent potential (FMR × 12)
 - Estimated supportable construction cost
 - Comparison to Logos' $325K/unit target
 - Meets threshold check
 
 **Example Output:**
-
 ```json
 {
   "section8_viability": {
@@ -225,7 +208,6 @@ else:
 **Target:** 60-80% AMI households (sweet spot for Section 8 + private funding)
 
 **Algorithm:**
-
 ```python
 if $50K <= 80% AMI <= $80K:
     score += 5   # Ideal range
@@ -238,13 +220,11 @@ else:
 ```
 
 **Additional Metrics Calculated:**
-
 - Max affordable rent at 80% AMI (30% of income rule)
 - Comparison to FMR
 - Tenant pool size implications
 
 **Example Output:**
-
 ```json
 {
   "ami_alignment": {
@@ -272,21 +252,19 @@ else:
 ### Step-by-Step Process
 
 **1. Property Enrichment (Triggered First)**
-
 ```
 User creates property → Enrichment service runs → HUD APIs called
 ```
 
 **Property Enrichment Service** (`property_enrichment.py`):
-
 ```python
 async def enrich_property(property_id):
     # ... geocoding, demographics ...
-
+    
     # Fetch HUD data
     hud_result = await _fetch_hud_data(property_obj)
     # Returns: income_limits, fair_market_rent, usps_crosswalk
-
+    
     # Store in property.data_sources (JSON field)
     property_obj.data_sources = json.dumps({
         "hud_data": hud_result,
@@ -295,29 +273,27 @@ async def enrich_property(property_id):
 ```
 
 **2. Assessment Scoring (Uses Enriched Data)**
-
 ```
 User triggers assessment → AI scoring runs → Reads HUD data from property
 ```
 
 **AI Assessment Service** (`ai_assessment.py`):
-
 ```python
 async def _analyze_market(property_obj, church, assessment):
     # Extract HUD data from property.data_sources
     hud_data = _extract_hud_data(property_obj)
-
+    
     # Base AI scoring
     score = 70.0
-
+    
     # Adjust based on Section 8 viability
     fmr_adjustment = _analyze_section8_viability(hud_data)
     score += fmr_adjustment["score_adjustment"]  # -10 to +10
-
+    
     # Adjust based on AMI alignment
     ami_adjustment = _analyze_ami_alignment(hud_data, assessment)
     score += ami_adjustment["score_adjustment"]  # -5 to +5
-
+    
     return score, analysis
 ```
 
@@ -335,7 +311,6 @@ curl -X POST http://localhost:8000/api/v1/properties/1/enrich \
 ```
 
 **Expected Response:**
-
 ```json
 {
   "status": "success",
@@ -374,10 +349,9 @@ curl -X POST http://localhost:8000/api/v1/assessments/1/process \
 ```
 
 **Expected in Response:**
-
 ```json
 {
-  "market_score": 78, // Adjusted based on HUD data
+  "market_score": 78,  // Adjusted based on HUD data
   "market_analysis": {
     "section8_viability": {
       "score_adjustment": 5,
@@ -399,19 +373,16 @@ curl -X POST http://localhost:8000/api/v1/assessments/1/process \
 ## 📋 API Requirements
 
 ### Environment Variable
-
 ```bash
 HUD_API_KEY=eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9...
 ```
 
 ### Rate Limits
-
 - **HUD APIs:** No official rate limit (respectful use recommended)
 - **Implementation:** 15-second timeouts per request
 - **Retry Logic:** Not implemented yet (add if needed)
 
 ### Error Handling
-
 ```python
 # If HUD API fails:
 return {
@@ -427,15 +398,13 @@ return {
 ## 📈 Impact on Overall Scoring
 
 ### Before HUD Integration
-
 ```
 Market Score = AI Analysis Only (70-80 range)
 ```
 
 ### After HUD Integration
-
 ```
-Market Score = AI Base (70)
+Market Score = AI Base (70) 
              + Section 8 Viability (-10 to +10)
              + AMI Alignment (-5 to +5)
              = 55-85 range
@@ -444,14 +413,12 @@ Market Score = AI Base (70)
 **Example Scenarios:**
 
 **Scenario A: Ideal Market**
-
 - Austin, TX: 2BR FMR = $1,785, 80% AMI = $74,800
 - Section 8 adjustment: +5 (good FMR)
 - AMI adjustment: +5 (ideal range)
 - **Final Market Score: 80/100**
 
 **Scenario B: Challenging Market**
-
 - Rural area: 2BR FMR = $950, 80% AMI = $35,000
 - Section 8 adjustment: -10 (low FMR)
 - AMI adjustment: -5 (very low AMI)
@@ -462,19 +429,15 @@ Market Score = AI Base (70)
 ## 🔮 Future Enhancements (Phase 2)
 
 ### Not Yet Implemented:
-
 1. ❌ **Section 8 Voucher Availability by County**
-
    - Would require: HUD Picture of Subsidized Households API
    - Purpose: Check actual voucher supply vs. demand
 
 2. ❌ **Historical FMR Trends**
-
    - Would require: Multi-year FMR data pulls
    - Purpose: Predict rent growth over project lifespan
 
 3. ❌ **Utility Allowance Integration**
-
    - Would require: HUD Utility Allowance data
    - Purpose: More accurate net rent calculations
 
@@ -487,19 +450,16 @@ Market Score = AI Base (70)
 ## 🎓 Key Learnings for Logos Model
 
 ### What This Validates:
-
 1. **Section 8 Rent Support** - Can vouchers cover Logos' operating costs?
 2. **Tenant Pool Size** - Are there enough 60-80% AMI households?
 3. **Geographic Viability** - Which markets support Logos' model best?
 
 ### Red Flags Detected:
-
 - ⚠️ FMR < $1,200 for 2BR → Project likely infeasible
 - ⚠️ 80% AMI < $40K → Tenant pool may struggle with payments
 - ⚠️ 80% AMI > $100K → Market may not need affordable housing
 
 ### Green Lights:
-
 - ✅ FMR ≥ $1,800 for 2BR → Strong project economics
 - ✅ 80% AMI $50K-$80K → Perfect tenant pool
 - ✅ Both conditions met → Ideal Logos opportunity
@@ -513,7 +473,7 @@ Market Score = AI Base (70)
 **New Helper Methods:** 4  
 **Lines of Code:** ~400 lines  
 **Breaking Changes:** None  
-**Database Changes:** None (uses existing JSON field)
+**Database Changes:** None (uses existing JSON field)  
 
 **Ready for Production:** ✅ Yes  
 **HUD API Key Required:** ✅ Yes (already configured)  
@@ -522,7 +482,6 @@ Market Score = AI Base (70)
 ---
 
 **Next Steps:**
-
 1. Test with real properties
 2. Monitor HUD API response times
 3. Add caching for HUD data (optional optimization)

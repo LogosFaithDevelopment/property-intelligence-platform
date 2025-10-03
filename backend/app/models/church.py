@@ -25,6 +25,9 @@ class Church(BaseModel, UUIDMixin, SoftDeleteMixin):
     
     __tablename__ = "churches"
     
+    # User Tracking (for authentication)
+    user_id = Column(String(255), nullable=True, index=True)  # Clerk user ID
+    
     # Basic Information
     name = Column(String(255), nullable=False, index=True)
     legal_name = Column(String(255), nullable=True)  # Official legal name if different

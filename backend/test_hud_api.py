@@ -5,9 +5,8 @@ Tests the HUD API endpoints directly
 """
 
 import asyncio
-import os
-
 import httpx
+import os
 from dotenv import load_dotenv
 
 # Load environment variables

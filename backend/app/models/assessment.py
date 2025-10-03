@@ -43,6 +43,9 @@ class Assessment(BaseModel, UUIDMixin):
     church = relationship("Church", back_populates="assessments")
     property_obj = relationship("Property", back_populates="assessments")
     
+    # User Tracking (for authentication)
+    user_id = Column(String(255), nullable=True, index=True)  # Clerk user ID
+    
     # Assessment Metadata
     status = Column(Enum(AssessmentStatus), default=AssessmentStatus.DRAFT, nullable=False)
     priority = Column(Enum(AssessmentPriority), default=AssessmentPriority.MEDIUM, nullable=False)

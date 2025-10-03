@@ -45,6 +45,9 @@ class Property(BaseModel, UUIDMixin, SoftDeleteMixin):
     church_id = Column(Integer, ForeignKey("churches.id"), nullable=False)
     church = relationship("Church", back_populates="properties")
     
+    # User Tracking (for authentication)
+    user_id = Column(String(255), nullable=True, index=True)  # Clerk user ID
+    
     # Basic Property Information
     name = Column(String(255), nullable=True)  # Property name/identifier
     property_type = Column(Enum(PropertyType), nullable=False)
