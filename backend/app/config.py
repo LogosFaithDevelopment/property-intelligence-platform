@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     
     # AI/ML APIs
     openai_api_key: str = Field(..., alias="OPENAI_API_KEY")
-    openai_model: str = Field(default="gpt-3.5-turbo", alias="OPENAI_MODEL")
+    openai_model: str = Field(default="gpt-4o-mini", alias="OPENAI_MODEL")
     
     # Free Tier APIs
     census_api_key: Optional[str] = Field(None, alias="CENSUS_API_KEY")
