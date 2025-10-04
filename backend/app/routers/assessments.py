@@ -7,6 +7,8 @@ import logging
 from typing import List, Optional
 
 from app.database import get_db
+from app.middleware.auth import (CurrentUser, get_current_user,
+                                 get_optional_user)
 from app.models.assessment import (Assessment, AssessmentPriority,
                                    AssessmentStatus)
 from app.models.church import Church
@@ -33,10 +35,11 @@ class AssessmentResponse:
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_assessment(
     assessment_data: dict,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user)
 ):
     """
-    Create a new property assessment
+    Create a new property assessment (requires authentication)
     """
     try:
         # Verify church and property exist
@@ -46,6 +49,13 @@ async def create_assessment(
         
         if not church:
             raise HTTPException(status_code=404, detail="Church not found")
+        
+        # Verify user owns the church (or is admin)
+        if church.user_id != current_user.user_id and not current_user.is_admin:
+            raise HTTPException(
+                status_code=403,
+                detail="You don't have permission to create assessments for this church"
+            )
         
         property_stmt = select(Property).where(Property.id == assessment_data.get("property_id"))
         property_result = await db.execute(property_stmt)
@@ -58,6 +68,7 @@ async def create_assessment(
         assessment = Assessment(
             church_id=assessment_data.get("church_id"),
             property_id=assessment_data.get("property_id"),
+            user_id=current_user.user_id,  # Track ownership
             status=AssessmentStatus.DRAFT,
             priority=AssessmentPriority[assessment_data.get("priority", "MEDIUM").upper()],
             congregation_approval=assessment_data.get("congregation_approval"),
@@ -74,7 +85,7 @@ async def create_assessment(
         await db.commit()
         await db.refresh(assessment)
         
-        logger.info(f"Created assessment {assessment.id} for property {property_obj.id}")
+        logger.info(f"Created assessment {assessment.id} for property {property_obj.id} by user {current_user.user_id}")
         
         return {
             "id": assessment.id,
