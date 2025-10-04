@@ -7,6 +7,8 @@ import logging
 from typing import List, Optional
 
 from app.database import get_db
+from app.middleware.auth import (CurrentUser, get_current_user,
+                                 get_optional_user)
 from app.models.church import Church
 from app.models.property import Property, PropertyType, ZoningType
 from app.schemas.base import (PaginatedResponse, PaginationParams,
@@ -27,10 +29,11 @@ router = APIRouter()
 async def create_property(
     property_data: PropertyCreate,
     background_tasks: BackgroundTasks,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user)
 ):
     """
-    Create a new property and trigger data enrichment
+    Create a new property and trigger data enrichment (requires authentication)
     """
     try:
         # Verify church exists and is active
@@ -44,6 +47,13 @@ async def create_property(
             raise HTTPException(
                 status_code=404,
                 detail="Church not found"
+            )
+        
+        # Verify user owns the church (or is admin)
+        if church.user_id != current_user.user_id and not current_user.is_admin:
+            raise HTTPException(
+                status_code=403,
+                detail="You don't have permission to add properties to this church"
             )
         
         # Check for duplicate address for this church
@@ -64,6 +74,7 @@ async def create_property(
         # Create property
         property_dict = property_data.model_dump(exclude_unset=True)
         property_obj = Property(**property_dict)
+        property_obj.user_id = current_user.user_id  # Track ownership
         
         # Auto-calculate acres if not provided
         if property_obj.lot_size_sqft and not property_obj.lot_size_acres:
@@ -76,7 +87,7 @@ async def create_property(
         # Schedule background data enrichment
         background_tasks.add_task(enrich_property_data, property_obj.id)
         
-        logger.info(f"Created property: {property_obj.full_address} (ID: {property_obj.id})")
+        logger.info(f"Created property: {property_obj.full_address} (ID: {property_obj.id}) by user: {current_user.user_id}")
         return property_obj
         
     except HTTPException:
