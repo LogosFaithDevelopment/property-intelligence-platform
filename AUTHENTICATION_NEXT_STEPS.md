@@ -9,15 +9,18 @@
 ## ✅ COMPLETED (Just Now)
 
 1. **Added authentication dependencies** to `requirements.txt`:
+
    - `pyjwt==2.8.0`
    - `cryptography==41.0.7`
 
 2. **Created authentication middleware** (`/backend/app/middleware/auth.py`):
+
    - `get_current_user()` - Extracts user from JWT token
    - `get_current_admin()` - Requires admin privileges
    - `CurrentUser` model with `user_id`, `email`, `is_admin`, `organization_id`
 
 3. **Created database migration** (`/backend/alembic/versions/add_user_tracking_001.py`):
+
    - Adds `user_id` column to `churches`, `properties`, `assessments` tables
    - Adds indexes for performance
 
@@ -42,6 +45,7 @@ docker-compose up -d
 ```
 
 **Verify installation:**
+
 ```bash
 docker-compose exec backend python -c "import jwt; print('✅ JWT installed')"
 ```
@@ -59,6 +63,7 @@ docker-compose exec postgres psql -U postgres -d property_intel -c "\d churches"
 ```
 
 **Expected output:**
+
 ```
  user_id                | character varying(255)   |           |          |
 ```
@@ -77,12 +82,14 @@ CLERK_JWT_KEY=your-jwt-secret-key
 ```
 
 **Get these keys from:**
+
 1. Go to https://clerk.com
 2. Sign up / Sign in
 3. Create new application: "Property Intelligence Platform"
 4. Copy keys from Dashboard → API Keys
 
 **Restart backend:**
+
 ```bash
 docker-compose restart backend
 ```
@@ -112,7 +119,7 @@ async def create_church(
     church = Church(**church_data.model_dump(exclude_unset=True))
     church.user_id = current_user.user_id  # TRACK OWNERSHIP
     church.verification_status = ChurchStatus.PENDING
-    
+
     db.add(church)
     await db.commit()
     return church
@@ -125,11 +132,11 @@ async def list_churches(
     db: AsyncSession = Depends(get_db)
 ):
     query = select(Church)
-    
+
     # ROW-LEVEL SECURITY: Only show user's churches
     if not current_user.is_admin:
         query = query.where(Church.user_id == current_user.user_id)
-    
+
     # ... rest of pagination logic
 ```
 
@@ -156,10 +163,10 @@ async def create_property(
     church = church_result.scalar_one_or_none()
     if not church and not current_user.is_admin:
         raise HTTPException(403, "Not authorized to add property to this church")
-    
+
     property_obj = Property(**property_data.model_dump(exclude_unset=True))
     property_obj.user_id = current_user.user_id
-    
+
     db.add(property_obj)
     await db.commit()
     return property_obj
@@ -182,14 +189,14 @@ async def get_assessment(
         select(Assessment).where(Assessment.id == assessment_id)
     )
     assessment = result.scalar_one_or_none()
-    
+
     if not assessment:
         raise HTTPException(404, "Assessment not found")
-    
+
     # ROW-LEVEL SECURITY: Check ownership
     if not current_user.is_admin and assessment.user_id != current_user.user_id:
         raise HTTPException(403, "Not authorized to view this assessment")
-    
+
     return assessment
 ```
 
@@ -201,6 +208,7 @@ async def get_assessment(
 
 1. Go to Clerk Dashboard → JWT Templates
 2. Create a test token with payload:
+
 ```json
 {
   "sub": "user_test123",
@@ -257,6 +265,7 @@ After implementing authentication:
 ## 📝 QUICK REFERENCE: Common Auth Patterns
 
 ### Pattern 1: Public Endpoint (No Auth)
+
 ```python
 @router.get("/health")
 async def health_check():
@@ -264,6 +273,7 @@ async def health_check():
 ```
 
 ### Pattern 2: Authenticated Endpoint
+
 ```python
 @router.get("/churches")
 async def list_churches(
@@ -275,6 +285,7 @@ async def list_churches(
 ```
 
 ### Pattern 3: Admin-Only Endpoint
+
 ```python
 @router.post("/churches/{id}/verify")
 async def verify_church(
@@ -287,6 +298,7 @@ async def verify_church(
 ```
 
 ### Pattern 4: Row-Level Security
+
 ```python
 # Only show data user owns
 query = query.where(Church.user_id == current_user.user_id)
@@ -304,6 +316,7 @@ else:
 ## ⚠️ IMPORTANT SECURITY NOTES
 
 1. **JWT Verification:** The current implementation uses HS256 (symmetric). For production, switch to RS256 with Clerk's JWKS:
+
    ```python
    # Production: Fetch Clerk's public keys
    jwks_url = f"https://api.clerk.com/v1/jwks"
@@ -323,16 +336,19 @@ else:
 Once authentication works, you're ready for:
 
 ### Week 1-2: Frontend Development
+
 - Build Next.js app with Clerk
 - Church submission form
 - Assessment results dashboard
 
 ### Week 3: Deployment
+
 - Deploy backend to Render
 - Deploy frontend to Vercel
 - Configure production Clerk instance
 
 ### Week 4: Beta Testing
+
 - Invite 3-5 churches
 - Collect feedback
 - Fix bugs
@@ -342,15 +358,19 @@ Once authentication works, you're ready for:
 ## 🆘 TROUBLESHOOTING
 
 ### Error: "ModuleNotFoundError: No module named 'jwt'"
+
 **Solution:** Run `docker-compose build backend` to rebuild with new dependencies
 
 ### Error: "column churches.user_id does not exist"
+
 **Solution:** Run migration: `docker-compose exec backend alembic upgrade head`
 
 ### Error: "Invalid authentication token"
+
 **Solution:** Check Clerk secret key in `.env` matches your Clerk dashboard
 
 ### Error: "403 Forbidden" when accessing own data
+
 **Solution:** Make sure `user_id` is set when creating records
 
 ---
@@ -358,6 +378,7 @@ Once authentication works, you're ready for:
 ## 📞 NEED HELP?
 
 If you get stuck:
+
 1. Check Docker logs: `docker-compose logs backend`
 2. Check database: `docker-compose exec postgres psql -U postgres -d property_intel`
 3. Test JWT decoder: https://jwt.io
