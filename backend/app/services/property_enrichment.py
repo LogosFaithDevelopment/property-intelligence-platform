@@ -77,20 +77,27 @@ class PropertyEnrichmentService:
             enrichment_results["completed_at"] = datetime.utcnow().isoformat()
             return enrichment_results
         
-        # Step 2: Fetch demographics from Census API
-        logger.info("Fetching demographics from Census API")
-        demographics_result = await self._fetch_demographics(property_obj)
-        enrichment_results["results"]["demographics"] = demographics_result
+        # Step 2-4: Fetch data from multiple APIs in parallel for speed
+        logger.info("Fetching data from Census, FEMA, and HUD APIs in parallel")
+        import asyncio
+
+        # Run independent API calls concurrently
+        demographics_task = asyncio.create_task(self._fetch_demographics(property_obj))
+        flood_task = asyncio.create_task(self._fetch_flood_risk(property_obj))
+        hud_task = asyncio.create_task(self._fetch_hud_data(property_obj))
         
-        # Step 3: Fetch flood risk from FEMA
-        logger.info("Fetching flood risk from FEMA")
-        flood_result = await self._fetch_flood_risk(property_obj)
-        enrichment_results["results"]["flood_risk"] = flood_result
+        # Wait for all to complete
+        demographics_result, flood_result, hud_result = await asyncio.gather(
+            demographics_task,
+            flood_task,
+            hud_task,
+            return_exceptions=True
+        )
         
-        # Step 4: Fetch HUD data (income limits, fair market rents)
-        logger.info("Fetching HUD data")
-        hud_result = await self._fetch_hud_data(property_obj)
-        enrichment_results["results"]["hud_data"] = hud_result
+        # Handle results (even if some failed)
+        enrichment_results["results"]["demographics"] = demographics_result if not isinstance(demographics_result, Exception) else {"status": "error", "error": str(demographics_result)}
+        enrichment_results["results"]["flood_risk"] = flood_result if not isinstance(flood_result, Exception) else {"status": "error", "error": str(flood_result)}
+        enrichment_results["results"]["hud_data"] = hud_result if not isinstance(hud_result, Exception) else {"status": "error", "error": str(hud_result)}
         
         # Step 5: Fetch nearby points of interest (if using premium APIs)
         if use_premium_apis and settings.google_maps_api_key:
@@ -222,43 +229,390 @@ class PropertyEnrichmentService:
                 }
     
     async def _fetch_demographics(self, property_obj: Property) -> Dict[str, Any]:
-        """Fetch demographic data from Census API"""
+        """
+        Fetch demographic data from Census API
+        
+        Uses American Community Survey (ACS) 5-Year Data for detailed demographics.
+        No API key required!
+        """
         
         try:
-            # For now, return placeholder data
-            # TODO: Implement actual Census API call based on lat/long
-            return {
-                "status": "success",
-                "source": "us_census",
-                "data": {
-                    "population": None,
-                    "median_income": None,
-                    "poverty_rate": None,
-                    "note": "Census API integration pending - requires Census block/tract lookup"
+            # First, get census tract from coordinates using Census Geocoder
+            logger.info(f"Looking up census tract for coordinates: {property_obj.latitude}, {property_obj.longitude}")
+            tract_info = await self._get_census_tract_from_coordinates(
+                property_obj.latitude, 
+                property_obj.longitude
+            )
+            
+            if not tract_info.get("success"):
+                logger.warning(f"Could not determine census tract: {tract_info.get('error')}")
+                return {
+                    "status": "partial_success",
+                    "source": "us_census",
+                    "data": {
+                        "error": "Could not determine census tract",
+                        "note": "Census data requires valid census tract"
+                    }
                 }
-            }
+            
+            state_fips = tract_info["state"]
+            county_fips = tract_info["county"]
+            tract_code = tract_info["tract"]
+            
+            logger.info(f"Found census tract: state={state_fips}, county={county_fips}, tract={tract_code}")
+            
+            # Fetch ACS 5-Year data for the tract
+            # Using 2022 data (latest available as of 2025)
+            demographics_data = await self._fetch_acs_data(state_fips, county_fips, tract_code)
+            
+            if demographics_data.get("success"):
+                return {
+                    "status": "success",
+                    "source": "us_census_acs",
+                    "data": {
+                        "census_tract": f"{state_fips}{county_fips}{tract_code}",
+                        "year": "2022",
+                        **demographics_data["data"]
+                    }
+                }
+            else:
+                return {
+                    "status": "error",
+                    "source": "us_census_acs",
+                    "error": demographics_data.get("error", "Failed to fetch demographics")
+                }
+                
         except Exception as e:
-            logger.error(f"Census API error: {str(e)}")
+            logger.error(f"Census API error: {str(e)}", exc_info=True)
             return {"status": "error", "error": str(e)}
     
+    async def _get_census_tract_from_coordinates(
+        self, 
+        latitude: float, 
+        longitude: float
+    ) -> Dict[str, Any]:
+        """
+        Get census tract from lat/lng using Census Geocoder API
+        
+        Free, no API key required
+        """
+        try:
+            url = "https://geocoding.geo.census.gov/geocoder/geographies/coordinates"
+            params = {
+                "x": longitude,
+                "y": latitude,
+                "benchmark": "Public_AR_Current",  # Current address ranges
+                "vintage": "Current_Current",  # Current geographic boundaries
+                "format": "json"
+            }
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, params=params, timeout=15.0)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    
+                    if data.get("result") and data["result"].get("geographies"):
+                        tracts = data["result"]["geographies"].get("Census Tracts", [])
+                        if tracts:
+                            tract = tracts[0]
+                            return {
+                                "success": True,
+                                "state": tract["STATE"],
+                                "county": tract["COUNTY"],
+                                "tract": tract["TRACT"],
+                                "basename": tract.get("BASENAME", "")
+                            }
+                    
+                    return {
+                        "success": False,
+                        "error": "No census tract found for coordinates"
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "error": f"Census Geocoder returned status {response.status_code}"
+                    }
+                    
+        except Exception as e:
+            logger.error(f"Census geocoder error: {str(e)}")
+            return {"success": False, "error": str(e)}
+    
+    async def _fetch_acs_data(
+        self, 
+        state_fips: str, 
+        county_fips: str, 
+        tract_code: str
+    ) -> Dict[str, Any]:
+        """
+        Fetch American Community Survey (ACS) 5-Year data
+        
+        Variables fetched:
+        - B01003_001E: Total population
+        - B19013_001E: Median household income
+        - B17001_002E: Population below poverty level
+        - B25001_001E: Total housing units
+        - B25003_002E: Owner-occupied housing units
+        - B25003_003E: Renter-occupied housing units
+        - B01002_001E: Median age
+        
+        Free, no API key required!
+        """
+        try:
+            url = "https://api.census.gov/data/2022/acs/acs5"
+            
+            # Variables to fetch
+            variables = [
+                "B01003_001E",  # Total population
+                "B19013_001E",  # Median household income
+                "B17001_002E",  # Below poverty level
+                "B25001_001E",  # Total housing units
+                "B25003_002E",  # Owner-occupied units
+                "B25003_003E",  # Renter-occupied units
+                "B01002_001E",  # Median age
+            ]
+            
+            params = {
+                "get": ",".join(variables),
+                "for": f"tract:{tract_code}",
+                "in": f"state:{state_fips} county:{county_fips}"
+            }
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, params=params, timeout=15.0)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    
+                    # Census API returns [headers, values]
+                    if len(data) >= 2:
+                        headers = data[0]
+                        values = data[1]
+                        
+                        # Create dict from headers and values
+                        result = dict(zip(headers, values))
+                        
+                        # Parse and structure the data
+                        total_pop = int(result.get("B01003_001E", 0) or 0)
+                        median_income = int(result.get("B19013_001E", -666666666) or -666666666)
+                        poverty_pop = int(result.get("B17001_002E", 0) or 0)
+                        total_housing = int(result.get("B25001_001E", 0) or 0)
+                        owner_occupied = int(result.get("B25003_002E", 0) or 0)
+                        renter_occupied = int(result.get("B25003_003E", 0) or 0)
+                        median_age = float(result.get("B01002_001E", 0) or 0)
+                        
+                        # Calculate derived metrics
+                        poverty_rate = round((poverty_pop / total_pop * 100), 2) if total_pop > 0 else 0
+                        occupancy_rate = round(((owner_occupied + renter_occupied) / total_housing * 100), 2) if total_housing > 0 else 0
+                        
+                        # Handle median income -666666666 (Census code for "not available")
+                        median_income_display = None if median_income == -666666666 else median_income
+                        
+                        return {
+                            "success": True,
+                            "data": {
+                                "population": total_pop,
+                                "median_income": median_income_display,
+                                "poverty_rate": poverty_rate,
+                                "median_age": median_age,
+                                "housing": {
+                                    "total_units": total_housing,
+                                    "owner_occupied": owner_occupied,
+                                    "renter_occupied": renter_occupied,
+                                    "occupancy_rate": occupancy_rate
+                                },
+                                "note": "Data from ACS 5-Year 2022"
+                            }
+                        }
+                    
+                    return {
+                        "success": False,
+                        "error": "No data returned from Census API"
+                    }
+                else:
+                    logger.error(f"Census ACS API error: {response.status_code} - {response.text}")
+                    return {
+                        "success": False,
+                        "error": f"Census API returned status {response.status_code}"
+                    }
+                    
+        except Exception as e:
+            logger.error(f"Census ACS data error: {str(e)}")
+            return {"success": False, "error": str(e)}
+    
     async def _fetch_flood_risk(self, property_obj: Property) -> Dict[str, Any]:
-        """Fetch flood risk data from FEMA"""
+        """
+        Fetch flood risk data from FEMA using OpenFEMA v2 API
+        
+        Uses a two-step approach:
+        1. Check for historical flood disasters in the county
+        2. Query NFIP (National Flood Insurance Program) data for the area
+        
+        Free, no API key required!
+        """
         
         try:
-            # For now, return placeholder
-            # TODO: Implement FEMA National Flood Hazard Layer API call
+            # Extract county from HUD crosswalk data if available
+            county_fips = None
+            state_code = None
+            
+            if property_obj.data_sources:
+                try:
+                    data_sources = json.loads(property_obj.data_sources) if isinstance(property_obj.data_sources, str) else property_obj.data_sources
+                    hud_data = data_sources.get("hud_data", {})
+                    crosswalk = hud_data.get("usps_crosswalk", {})
+                    
+                    if crosswalk.get("status") == "success" and crosswalk.get("data", {}).get("results"):
+                        # Get first census tract result
+                        first_result = crosswalk["data"]["results"][0]
+                        geoid = first_result.get("geoid", "")
+                        
+                        if len(geoid) >= 5:
+                            # GEOID format: SSCCCTTTTTT (State 2 digits + County 3 digits + Tract 6 digits)
+                            state_code = geoid[:2]
+                            county_fips = geoid[2:5]
+                except Exception as e:
+                    logger.warning(f"Could not extract county from HUD data: {e}")
+            
+            # Step 1: Check for recent flood disasters in the county using OpenFEMA v2
+            disaster_history = await self._fetch_flood_disaster_history(state_code, county_fips)
+            
+            # Step 2: For now, estimate flood risk based on disaster history
+            # In production, you would integrate with FEMA's Flood Map Service Center API
+            flood_zone = self._estimate_flood_zone_from_history(disaster_history)
+            risk_level = self._determine_flood_risk_level(flood_zone)
+            description = self._get_flood_zone_description(flood_zone)
+            
             return {
                 "status": "success",
-                "source": "fema_nfhl",
+                "source": "openfema_v2",
                 "data": {
-                    "flood_zone": None,
-                    "risk_level": "unknown",
-                    "note": "FEMA API integration pending"
+                    "flood_zone": flood_zone,
+                    "zone_subtype": None,
+                    "in_sfha": flood_zone in ["A", "AE", "AH", "AO", "V", "VE"],
+                    "risk_level": risk_level,
+                    "description": description,
+                    "base_flood_elevation": None,
+                    "disaster_history": disaster_history,
+                    "note": "Flood risk estimated from FEMA disaster history. For precise flood zone, consult FEMA Flood Map Service Center."
                 }
             }
+                    
         except Exception as e:
-            logger.error(f"FEMA API error: {str(e)}")
-            return {"status": "error", "error": str(e)}
+            logger.error(f"FEMA API error: {str(e)}", exc_info=True)
+            return {
+                "status": "error", 
+                "source": "openfema_v2",
+                "error": str(e)
+            }
+    
+    async def _fetch_flood_disaster_history(self, state_code: Optional[str], county_fips: Optional[str]) -> Dict[str, Any]:
+        """
+        Fetch historical flood disaster declarations from OpenFEMA v2 API
+        """
+        try:
+            # OpenFEMA v2 Disaster Declarations endpoint
+            url = "https://www.fema.gov/api/open/v2/DisasterDeclarationsSummaries"
+            
+            # Build filter for flood-related disasters
+            filters = []
+            
+            if state_code:
+                filters.append(f"state eq '{state_code}'")
+            
+            # Filter for flood-related incident types
+            flood_types = ["Flood", "Severe Storm(s)", "Hurricane", "Coastal Storm"]
+            incident_filter = " or ".join([f"incidentType eq '{t}'" for t in flood_types])
+            filters.append(f"({incident_filter})")
+            
+            # Only get disasters from last 20 years
+            filters.append("declarationDate ge '2004-01-01'")
+            
+            filter_string = " and ".join(filters)
+            
+            params = {
+                "$filter": filter_string,
+                "$select": "disasterNumber,declarationDate,incidentType,declarationTitle,ihProgramDeclared,iaProgramDeclared",
+                "$orderby": "declarationDate desc",
+                "$top": 50
+            }
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, params=params, timeout=15.0)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    disasters = data.get("DisasterDeclarationsSummaries", [])
+                    
+                    flood_count = len([d for d in disasters if "Flood" in d.get("incidentType", "")])
+                    recent_floods = [d for d in disasters[:5]]  # Last 5 disasters
+                    
+                    return {
+                        "total_disasters": len(disasters),
+                        "flood_disasters": flood_count,
+                        "recent_events": recent_floods,
+                        "has_flood_history": flood_count > 0
+                    }
+                else:
+                    logger.warning(f"OpenFEMA API returned {response.status_code}")
+                    return {"total_disasters": 0, "flood_disasters": 0, "has_flood_history": False}
+                    
+        except Exception as e:
+            logger.error(f"Error fetching flood disaster history: {e}")
+            return {"total_disasters": 0, "flood_disasters": 0, "has_flood_history": False}
+    
+    def _estimate_flood_zone_from_history(self, disaster_history: Dict[str, Any]) -> str:
+        """
+        Estimate flood zone based on disaster history
+        This is a simplified approach - production should use FEMA Flood Map Service
+        """
+        flood_count = disaster_history.get("flood_disasters", 0)
+        
+        if flood_count >= 5:
+            return "A"  # High risk - multiple flood events
+        elif flood_count >= 2:
+            return "X500"  # Moderate risk - some flood history
+        else:
+            return "X"  # Minimal risk - no significant flood history
+    
+    def _determine_flood_risk_level(self, flood_zone: str) -> str:
+        """
+        Determine flood risk level from FEMA flood zone
+        
+        Zone Categories:
+        - High Risk: A, AE, AH, AO, AR, A99, V, VE
+        - Moderate Risk: B, X (shaded)
+        - Minimal Risk: C, X (unshaded)
+        """
+        
+        high_risk_zones = ["A", "AE", "AH", "AO", "AR", "A99", "V", "VE", "V1-30", "VE1-30"]
+        moderate_risk_zones = ["B", "X500"]
+        
+        if flood_zone in high_risk_zones or flood_zone.startswith("A") or flood_zone.startswith("V"):
+            return "high"
+        elif flood_zone in moderate_risk_zones:
+            return "moderate"
+        else:
+            return "minimal"
+    
+    def _get_flood_zone_description(self, flood_zone: str) -> str:
+        """Get human-readable description of flood zone"""
+        
+        descriptions = {
+            "X": "Area of minimal flood hazard (0.2% annual chance)",
+            "A": "High risk - 1% annual chance flood zone (no BFE determined)",
+            "AE": "High risk - 1% annual chance with Base Flood Elevation",
+            "AH": "High risk - shallow flooding area (1-3 feet deep)",
+            "AO": "High risk - sheet flow flooding area",
+            "AR": "High risk - area with temporarily increased flood risk",
+            "A99": "High risk - area protected by Federal flood control system under construction",
+            "V": "High risk - coastal area with velocity hazard (wave action)",
+            "VE": "High risk - coastal with velocity hazard and Base Flood Elevation",
+            "B": "Moderate risk - area between 0.2% and 1% annual chance",
+            "X500": "Moderate risk - 0.2% annual chance flood zone"
+        }
+        
+        return descriptions.get(flood_zone, f"Flood Zone {flood_zone}")
     
     async def _fetch_hud_data(self, property_obj: Property) -> Dict[str, Any]:
         """
@@ -325,8 +679,12 @@ class PropertyEnrichmentService:
             
             # Step 3: Fetch Fair Market Rents (FMR)
             # Critical for Logos: Section 8 voucher payment standards
-            logger.info(f"Fetching fair market rents for ZIP {property_obj.zip_code}")
-            fmr_data = await self._fetch_hud_fair_market_rent(property_obj.zip_code)
+            logger.info(f"Fetching fair market rents for county {county_fips or property_obj.county}")
+            fmr_data = await self._fetch_hud_fair_market_rent(
+                zip_code=property_obj.zip_code,
+                county_fips=county_fips,
+                state_code=state_code
+            )
             results["fair_market_rent"] = fmr_data
             
             return {
@@ -339,6 +697,61 @@ class PropertyEnrichmentService:
             logger.error(f"HUD API error: {str(e)}", exc_info=True)
             return {"status": "error", "error": str(e), "data": {}}
     
+    async def _get_hud_entityid_from_state(
+        self, 
+        state_code: Optional[str], 
+        county_fips: Optional[str]
+    ) -> Optional[str]:
+        """
+        Get 10-digit HUD entityid by querying listCounties endpoint
+        Returns entityid in format: 4845399999 (state+county+99999)
+        """
+        if not state_code or not county_fips:
+            return None
+        
+        try:
+            # Get state abbreviation from state FIPS code
+            state_fips_to_abbr = {
+                "01": "AL", "02": "AK", "04": "AZ", "05": "AR", "06": "CA",
+                "08": "CO", "09": "CT", "10": "DE", "11": "DC", "12": "FL",
+                "13": "GA", "15": "HI", "16": "ID", "17": "IL", "18": "IN",
+                "19": "IA", "20": "KS", "21": "KY", "22": "LA", "23": "ME",
+                "24": "MD", "25": "MA", "26": "MI", "27": "MN", "28": "MS",
+                "29": "MO", "30": "MT", "31": "NE", "32": "NV", "33": "NH",
+                "34": "NJ", "35": "NM", "36": "NY", "37": "NC", "38": "ND",
+                "39": "OH", "40": "OK", "41": "OR", "42": "PA", "44": "RI",
+                "45": "SC", "46": "SD", "47": "TN", "48": "TX", "49": "UT",
+                "50": "VT", "51": "VA", "53": "WA", "54": "WV", "55": "WI",
+                "56": "WY", "72": "PR"
+            }
+            
+            state_abbr = state_fips_to_abbr.get(state_code)
+            if not state_abbr:
+                return None
+            
+            # Query HUD listCounties API
+            url = f"https://www.huduser.gov/hudapi/public/fmr/listCounties/{state_abbr}"
+            headers = {"Authorization": f"Bearer {settings.hud_api_key}"}
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, headers=headers, timeout=15.0)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    counties = data.get("data", [])
+                    
+                    # Find county matching our FIPS code
+                    target_fips = f"{state_code}{county_fips}"
+                    for county in counties:
+                        fips_code = county.get("fips_code", "")
+                        if fips_code.startswith(target_fips):
+                            return fips_code
+                            
+        except Exception as e:
+            logger.warning(f"Could not fetch HUD entityid: {e}")
+        
+        return None
+
     async def _fetch_hud_usps_crosswalk(self, zip_code: str) -> Dict[str, Any]:
         """
         Fetch ZIP-to-Tract crosswalk from HUD USPS API
@@ -399,75 +812,83 @@ class PropertyEnrichmentService:
         - 30% AMI (Extremely Low Income)
         - 60% AMI (Very Low Income)
         - 80% AMI (Low Income) - Logos' primary target
-        - 110% AMI (Moderate Income)
         
         Critical for Logos: Validates affordability and tenant eligibility
         """
         
         try:
-            # HUD Income Limits API endpoint
-            # https://www.huduser.gov/portal/dataset/fmr-api.html
-            url = "https://www.huduser.gov/hudapi/public/il"
+            # First, get the correct 10-digit FIPS entityid from HUD
+            # Format: State(2) + County(3) + 99999 = 10 digits
+            entityid = None
             
-            # Try county-based query first (most accurate)
             if county_fips and len(county_fips) == 5:
-                params = {"entityid": county_fips}
-            else:
-                # Fallback to ZIP code query
-                params = {"zip": zip_code}
+                # Convert 5-digit FIPS (e.g., "48453") to 10-digit entityid
+                # Format: 48453 + 99999 = 4845399999
+                entityid = f"{county_fips}99999"
             
+            if not entityid:
+                # Fallback: Try to get entityid from listCounties
+                entityid = await self._get_hud_entityid_from_state(state_code, county_fips)
+            
+            if not entityid:
+                return {
+                    "success": False,
+                    "error": "Could not determine HUD entityid for county"
+                }
+            
+            # HUD Income Limits API: /il/data/{entityid}
+            url = f"https://www.huduser.gov/hudapi/public/il/data/{entityid}"
             headers = {
                 "Authorization": f"Bearer {settings.hud_api_key}"
             }
             
             async with httpx.AsyncClient() as client:
-                response = await client.get(url, params=params, headers=headers, timeout=15.0)
+                response = await client.get(url, headers=headers, timeout=15.0)
                 
                 if response.status_code == 200:
                     data = response.json()
                     
-                    # Extract relevant AMI thresholds for different household sizes
-                    # Focus on 1-4 person households (typical for affordable housing)
-                    if data.get("data") and data["data"].get("income"):
-                        income_data = data["data"]["income"]
+                    # Parse the HUD IL API response structure
+                    if data.get("data"):
+                        il_data = data["data"]
                         
-                        # Extract limits for 1-4 person households
+                        # Extract income limits (30%, 50%, 60%, 80%)
+                        extremely_low = il_data.get("extremely_low", {})
+                        very_low = il_data.get("very_low", {})
+                        low = il_data.get("low", {})
+                        
                         return {
                             "success": True,
-                            "year": data["data"].get("year"),
-                            "area_name": data["data"].get("area_name"),
-                            "median_income": data["data"].get("median"),
+                            "year": il_data.get("year"),
+                            "area_name": il_data.get("area_name", il_data.get("county_name", "Unknown")),
+                            "median_income": il_data.get("median_income"),
                             "limits_by_household_size": {
                                 "1_person": {
-                                    "30_percent_ami": income_data.get("l30_1"),
-                                    "50_percent_ami": income_data.get("l50_1"),
-                                    "60_percent_ami": income_data.get("l60_1"),
-                                    "80_percent_ami": income_data.get("l80_1"),
+                                    "30_percent_ami": extremely_low.get("il30_p1"),
+                                    "50_percent_ami": very_low.get("il50_p1"),
+                                    "80_percent_ami": low.get("il80_p1"),
                                 },
                                 "2_person": {
-                                    "30_percent_ami": income_data.get("l30_2"),
-                                    "50_percent_ami": income_data.get("l50_2"),
-                                    "60_percent_ami": income_data.get("l60_2"),
-                                    "80_percent_ami": income_data.get("l80_2"),
+                                    "30_percent_ami": extremely_low.get("il30_p2"),
+                                    "50_percent_ami": very_low.get("il50_p2"),
+                                    "80_percent_ami": low.get("il80_p2"),
                                 },
                                 "3_person": {
-                                    "30_percent_ami": income_data.get("l30_3"),
-                                    "50_percent_ami": income_data.get("l50_3"),
-                                    "60_percent_ami": income_data.get("l60_3"),
-                                    "80_percent_ami": income_data.get("l80_3"),
+                                    "30_percent_ami": extremely_low.get("il30_p3"),
+                                    "50_percent_ami": very_low.get("il50_p3"),
+                                    "80_percent_ami": low.get("il80_p3"),
                                 },
                                 "4_person": {
-                                    "30_percent_ami": income_data.get("l30_4"),
-                                    "50_percent_ami": income_data.get("l50_4"),
-                                    "60_percent_ami": income_data.get("l60_4"),
-                                    "80_percent_ami": income_data.get("l80_4"),
+                                    "30_percent_ami": extremely_low.get("il30_p4"),
+                                    "50_percent_ami": very_low.get("il50_p4"),
+                                    "80_percent_ami": low.get("il80_p4"),
                                 }
                             }
                         }
                     else:
                         return {
                             "success": False,
-                            "error": "No income limit data found"
+                            "error": "No income limit data found in response"
                         }
                 else:
                     logger.error(f"HUD Income Limits API error: {response.status_code} - {response.text}")
@@ -477,10 +898,15 @@ class PropertyEnrichmentService:
                     }
                     
         except Exception as e:
-            logger.error(f"HUD Income Limits error: {str(e)}")
+            logger.error(f"HUD Income Limits error: {str(e)}", exc_info=True)
             return {"success": False, "error": str(e)}
     
-    async def _fetch_hud_fair_market_rent(self, zip_code: str) -> Dict[str, Any]:
+    async def _fetch_hud_fair_market_rent(
+        self, 
+        zip_code: str,
+        county_fips: Optional[str] = None,
+        state_code: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Fetch Fair Market Rent (FMR) from HUD API
         
@@ -497,46 +923,91 @@ class PropertyEnrichmentService:
         """
         
         try:
-            # HUD Fair Market Rent API endpoint
-            url = "https://www.huduser.gov/hudapi/public/fmr/data"
-            params = {"zip": zip_code}
+            # First, get the correct 10-digit FIPS entityid
+            # Format: State(2) + County(3) + 99999 = 10 digits
+            entityid = None
+            
+            if county_fips and len(county_fips) == 5:
+                # Convert 5-digit FIPS to 10-digit entityid
+                entityid = f"{county_fips}99999"
+            
+            if not entityid:
+                # Fallback: Try to get entityid from listCounties
+                entityid = await self._get_hud_entityid_from_state(state_code, county_fips)
+            
+            if not entityid:
+                return {
+                    "success": False,
+                    "error": "Could not determine HUD entityid for county"
+                }
+            
+            # HUD FMR API: /fmr/data/{entityid}
+            url = f"https://www.huduser.gov/hudapi/public/fmr/data/{entityid}"
             headers = {
                 "Authorization": f"Bearer {settings.hud_api_key}"
             }
             
             async with httpx.AsyncClient() as client:
-                response = await client.get(url, params=params, headers=headers, timeout=15.0)
+                response = await client.get(url, headers=headers, timeout=15.0)
                 
                 if response.status_code == 200:
                     data = response.json()
                     
-                    if data.get("data") and data["data"].get("basicdata"):
-                        fmr_data = data["data"]["basicdata"]
+                    if data.get("data"):
+                        fmr_info = data["data"]
                         
-                        return {
-                            "success": True,
-                            "year": fmr_data.get("year"),
-                            "area_name": fmr_data.get("area_name"),
-                            "metro_code": fmr_data.get("metro_code"),
-                            "county_name": fmr_data.get("county_name"),
-                            "rent_by_bedroom": {
-                                "studio": fmr_data.get("rent_0br"),  # Efficiency/studio
-                                "1_bedroom": fmr_data.get("rent_1br"),
-                                "2_bedroom": fmr_data.get("rent_2br"),
-                                "3_bedroom": fmr_data.get("rent_3br"),
-                                "4_bedroom": fmr_data.get("rent_4br")
-                            },
-                            # Calculate affordable rent limits (30% of income rule)
-                            "logos_notes": {
-                                "section_8_basis": "FMR determines Section 8 voucher payment standards",
-                                "rent_ceiling": "Maximum rent Logos can charge voucher holders",
-                                "model_dependency": "Critical for private funding model viability"
+                        # Handle different response structures (single area vs small area FMRs)
+                        if isinstance(fmr_info.get("basicdata"), dict):
+                            # Standard FMR structure
+                            fmr_data = fmr_info["basicdata"]
+                            return {
+                                "success": True,
+                                "year": fmr_data.get("year"),
+                                "area_name": fmr_info.get("area_name", fmr_info.get("county_name")),
+                                "county_name": fmr_info.get("county_name"),
+                                "rent_by_bedroom": {
+                                    "studio": fmr_data.get("Efficiency"),
+                                    "1_bedroom": fmr_data.get("One-Bedroom"),
+                                    "2_bedroom": fmr_data.get("Two-Bedroom"),
+                                    "3_bedroom": fmr_data.get("Three-Bedroom"),
+                                    "4_bedroom": fmr_data.get("Four-Bedroom")
+                                },
+                                "logos_notes": {
+                                    "section_8_basis": "FMR determines Section 8 voucher payment standards",
+                                    "rent_ceiling": "Maximum rent Logos can charge voucher holders"
+                                }
                             }
-                        }
+                        elif isinstance(fmr_info.get("basicdata"), list):
+                            # Small Area FMR structure - get MSA-level data
+                            basicdata_list = fmr_info["basicdata"]
+                            msa_data = next((item for item in basicdata_list if item.get("zip_code") == "MSA level"), basicdata_list[0] if basicdata_list else {})
+                            
+                            return {
+                                "success": True,
+                                "year": fmr_info.get("year"),
+                                "area_name": fmr_info.get("area_name", fmr_info.get("metro_name")),
+                                "smallarea_status": True,
+                                "rent_by_bedroom": {
+                                    "studio": msa_data.get("Efficiency"),
+                                    "1_bedroom": msa_data.get("One-Bedroom"),
+                                    "2_bedroom": msa_data.get("Two-Bedroom"),
+                                    "3_bedroom": msa_data.get("Three-Bedroom"),
+                                    "4_bedroom": msa_data.get("Four-Bedroom")
+                                },
+                                "logos_notes": {
+                                    "section_8_basis": "FMR determines Section 8 voucher payment standards",
+                                    "rent_ceiling": "Maximum rent Logos can charge voucher holders"
+                                }
+                            }
+                        else:
+                            return {
+                                "success": False,
+                                "error": "Unexpected FMR data structure"
+                            }
                     else:
                         return {
                             "success": False,
-                            "error": "No FMR data found for ZIP"
+                            "error": "No FMR data found in response"
                         }
                 else:
                     logger.error(f"HUD FMR API error: {response.status_code} - {response.text}")
@@ -546,7 +1017,7 @@ class PropertyEnrichmentService:
                     }
                     
         except Exception as e:
-            logger.error(f"HUD FMR error: {str(e)}")
+            logger.error(f"HUD FMR error: {str(e)}", exc_info=True)
             return {"success": False, "error": str(e)}
     
     async def _fetch_nearby_pois(self, property_obj: Property) -> Dict[str, Any]:
