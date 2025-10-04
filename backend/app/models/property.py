@@ -49,7 +49,7 @@ class Property(BaseModel, UUIDMixin, SoftDeleteMixin):
     user_id = Column(String(255), nullable=True, index=True)  # Clerk user ID
     
     # Basic Property Information
-    name = Column(String(255), nullable=True)  # Property name/identifier
+    name = Column(String(255), nullable=True)  # Property name/identifierica
     property_type = Column(Enum(PropertyType), nullable=False)
     
     # Address Information
