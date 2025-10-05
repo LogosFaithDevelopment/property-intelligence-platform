@@ -436,6 +436,77 @@ class ReportGenerator:
         story.append(score_table)
         story.append(Spacer(1, 0.3*inch))
         
+        # ========================================
+        # RECOMMENDATION - Moved up for clarity
+        # ========================================
+        story.append(Paragraph("<b>🎯 RECOMMENDATION</b>", self.styles['SectionHeader']))
+        story.append(Spacer(1, 0.15*inch))
+        
+        # Determine if there are deal breakers first
+        has_deal_breakers = False
+        if assessment.financial_projections:
+            fin_proj = assessment.financial_projections
+            unit_capacity = fin_proj.get('unit_capacity', {})
+            feasible_units = unit_capacity.get('feasible_units', 0)
+            if feasible_units < 40:
+                has_deal_breakers = True
+        
+        # Show accurate recommendation based on deal breakers and score
+        if has_deal_breakers:
+            recommendation = f"""
+            <para backColor=#ffebee leftIndent=10 rightIndent=10 spaceBefore=10 spaceAfter=10 fontSize=12>
+            <b><font color=red>✗ NOT RECOMMENDED - CRITICAL DEAL BREAKER PRESENT</font></b><br/><br/>
+            This property has a <b>critical deal breaker</b> that makes development financially unfeasible under 
+            current conditions. The lot size is insufficient to meet Logos' minimum 40-unit requirement, which is 
+            essential for achieving economies of scale and maintaining cost per unit below $325,000.<br/><br/>
+            <b>Deal Breaker:</b> Only {fin_proj.get('unit_capacity', {}).get('feasible_units', 0)} units feasible (requires 40+ units minimum)<br/><br/>
+            <b>Next Steps:</b> Acquire additional adjacent land, partner with neighboring property owner, or consider alternative site.
+            </para>
+            """
+        elif score >= 80:
+            recommendation = f"""
+            <para backColor=#e8f5e9 leftIndent=10 rightIndent=10 spaceBefore=10 spaceAfter=10 fontSize=12>
+            <b><font color=green>✓ STRONGLY RECOMMENDED FOR DEVELOPMENT</font></b><br/><br/>
+            This property scores {score:.1f}/100 (Grade {grade}), placing it in the top tier of Logos development opportunities. 
+            The financial projections are solid, market demand is strong, and partnership alignment is excellent. 
+            Proceed with full due diligence and site planning.<br/><br/>
+            <b>Next Steps:</b> Schedule site visit, commission environmental report, begin architectural planning.
+            </para>
+            """
+        elif score >= 70:
+            recommendation = f"""
+            <para backColor=#fff9c4 leftIndent=10 rightIndent=10 spaceBefore=10 spaceAfter=10 fontSize=12>
+            <b><font color=orange>⚠️ CONDITIONALLY APPROVED - ADDRESS KEY ISSUES</font></b><br/><br/>
+            This property scores {score:.1f}/100 (Grade {grade}), meeting minimum viability standards but requiring 
+            risk mitigation before final approval. Review the issues identified below and develop action plans 
+            to address each concern.<br/><br/>
+            <b>Next Steps:</b> Address flagged concerns, obtain additional data, reassess after mitigation.
+            </para>
+            """
+        elif score >= 60:
+            recommendation = f"""
+            <para backColor=#ffe0b2 leftIndent=10 rightIndent=10 spaceBefore=10 spaceAfter=10 fontSize=12>
+            <b><font color=orange>⚠️ HIGH RISK - SIGNIFICANT CONCERNS IDENTIFIED</font></b><br/><br/>
+            This property scores {score:.1f}/100 (Grade {grade}), indicating significant challenges that make 
+            development risky. Multiple concerns have been identified that could jeopardize project viability. 
+            Careful review of all issues is required before proceeding.<br/><br/>
+            <b>Next Steps:</b> Senior leadership review required. Consider alternative sites.
+            </para>
+            """
+        else:
+            recommendation = f"""
+            <para backColor=#ffebee leftIndent=10 rightIndent=10 spaceBefore=10 spaceAfter=10 fontSize=12>
+            <b><font color=red>✗ NOT RECOMMENDED - CRITICAL ISSUES PRESENT</font></b><br/><br/>
+            This property scores {score:.1f}/100 (Grade {grade}), falling below minimum viability thresholds. 
+            Critical issues have been identified that make this development financially or operationally unfeasible 
+            under current conditions. Review deal-breakers below.<br/><br/>
+            <b>Next Steps:</b> Explore site modifications or consider alternative properties.
+            </para>
+            """
+        
+        story.append(Paragraph(recommendation, self.styles['Normal']))
+        story.append(Spacer(1, 0.3*inch))
+        
         # Key Data Points that drove the grade
         story.append(Paragraph("<b>📋 KEY DATA DRIVING THIS ASSESSMENT</b>", self.styles['SectionHeader']))
         story.append(Spacer(1, 0.15*inch))
@@ -495,8 +566,8 @@ class ReportGenerator:
         <para backColor=#fff9c4 leftIndent=10 rightIndent=10 spaceBefore=6 spaceAfter=6>
         <b>📍 LOCATION QUALITY ({assessment.location_score:.1f}/100 - {self._calculate_grade(assessment.location_score)})</b><br/>
         • Property Address: {property_obj.full_address}<br/>
-        • Lot Size: {property_obj.lot_size_acres:.2f} acres ({property_obj.lot_size_sqft:,.0f} sq ft)<br/>
-        • Zoning: {property_obj.zoning_description or property_obj.zoning_classification.value}<br/>
+        • Lot Size: {f"{property_obj.lot_size_acres:.2f} acres ({property_obj.lot_size_sqft:,.0f} sq ft)" if property_obj.lot_size_acres and property_obj.lot_size_sqft else "Not specified"}<br/>
+        • Zoning: {property_obj.zoning_description or (property_obj.zoning_classification.value if property_obj.zoning_classification else "Not specified")}<br/>
         • Transit Access: {"Excellent" if assessment.location_score >= 80 else "Good" if assessment.location_score >= 60 else "Limited"}<br/>
         • Neighborhood: {property_obj.city}, {property_obj.state}<br/>
         {'• <font color=green><b>✓ PRIME LOCATION</b></font>' if assessment.location_score >= 80 else '• <font color=orange><b>⚠ ACCEPTABLE LOCATION</b></font>' if assessment.location_score >= 60 else '• <font color=red><b>✗ LOCATION CONCERNS</b></font>'}
@@ -526,11 +597,12 @@ class ReportGenerator:
             story.append(Spacer(1, 0.1*inch))
         
         # Partnership data
+        congregation_display = f"{church.congregation_size:,} members" if church.congregation_size else "Not specified"
         partnership_text = f"""
         <para backColor=#f3e5f5 leftIndent=10 rightIndent=10 spaceBefore=6 spaceAfter=6>
         <b>🤝 PARTNERSHIP ALIGNMENT ({assessment.partnership_score:.1f}/100 - {self._calculate_grade(assessment.partnership_score)})</b><br/>
         • Church: {church.name}<br/>
-        • Congregation Size: {church.congregation_size:,} members<br/>
+        • Congregation Size: {congregation_display}<br/>
         • Community Support: {assessment.leadership_support or "To be determined"}<br/>
         • Timeline: {assessment.timeline_readiness or "Flexible"}<br/>
         • Development Experience: {"Yes" if church.previous_development_experience else "No (Logos provides expertise)"}<br/>
@@ -538,54 +610,6 @@ class ReportGenerator:
         </para>
         """
         story.append(Paragraph(partnership_text, self.styles['Normal']))
-        story.append(Spacer(1, 0.3*inch))
-        
-        # Final recommendation
-        story.append(Paragraph("<b>🎯 FINAL RECOMMENDATION</b>", self.styles['SectionHeader']))
-        story.append(Spacer(1, 0.15*inch))
-        
-        if score >= 80:
-            recommendation = f"""
-            <para backColor=#e8f5e9 leftIndent=10 rightIndent=10 spaceBefore=10 spaceAfter=10 fontSize=12>
-            <b><font color=green>✓ STRONGLY RECOMMENDED FOR DEVELOPMENT</font></b><br/><br/>
-            This property scores {score:.1f}/100 (Grade {grade}), placing it in the top tier of Logos development opportunities. 
-            The financial projections are solid, market demand is strong, and partnership alignment is excellent. 
-            Proceed with full due diligence and site planning.<br/><br/>
-            <b>Next Steps:</b> Schedule site visit, commission environmental report, begin architectural planning.
-            </para>
-            """
-        elif score >= 70:
-            recommendation = f"""
-            <para backColor=#fff9c4 leftIndent=10 rightIndent=10 spaceBefore=10 spaceAfter=10 fontSize=12>
-            <b><font color=orange>⚠️ CONDITIONALLY APPROVED - ADDRESS KEY ISSUES</font></b><br/><br/>
-            This property scores {score:.1f}/100 (Grade {grade}), meeting minimum viability standards but requiring 
-            risk mitigation before final approval. Review the issues identified below and develop action plans 
-            to address each concern.<br/><br/>
-            <b>Next Steps:</b> Address flagged concerns, obtain additional data, reassess after mitigation.
-            </para>
-            """
-        elif score >= 60:
-            recommendation = f"""
-            <para backColor=#ffe0b2 leftIndent=10 rightIndent=10 spaceBefore=10 spaceAfter=10 fontSize=12>
-            <b><font color=orange>⚠️ HIGH RISK - SIGNIFICANT CONCERNS IDENTIFIED</font></b><br/><br/>
-            This property scores {score:.1f}/100 (Grade {grade}), indicating significant challenges that make 
-            development risky. Multiple concerns have been identified that could jeopardize project viability. 
-            Careful review of all issues is required before proceeding.<br/><br/>
-            <b>Next Steps:</b> Senior leadership review required. Consider alternative sites.
-            </para>
-            """
-        else:
-            recommendation = f"""
-            <para backColor=#ffebee leftIndent=10 rightIndent=10 spaceBefore=10 spaceAfter=10 fontSize=12>
-            <b><font color=red>✗ NOT RECOMMENDED - CRITICAL ISSUES PRESENT</font></b><br/><br/>
-            This property scores {score:.1f}/100 (Grade {grade}), falling below minimum viability thresholds. 
-            Critical issues have been identified that make this development financially or operationally unfeasible 
-            under current conditions. Review deal-breakers below.<br/><br/>
-            <b>Next Steps:</b> Explore site modifications or consider alternative properties.
-            </para>
-            """
-        
-        story.append(Paragraph(recommendation, self.styles['Normal']))
         story.append(Spacer(1, 0.3*inch))
         
         # Now show specific issues/concerns
