@@ -77,8 +77,8 @@ class PropertyEnrichmentService:
             enrichment_results["completed_at"] = datetime.utcnow().isoformat()
             return enrichment_results
         
-        # Step 2-4: Fetch data from multiple APIs in parallel for speed
-        logger.info("Fetching data from Census, FEMA, and HUD APIs in parallel")
+        # Step 2-5: Fetch data from multiple APIs in parallel for speed
+        logger.info("Fetching data from Census, FEMA, HUD, and ATTOM APIs in parallel")
         import asyncio
 
         # Run independent API calls concurrently
@@ -86,24 +86,55 @@ class PropertyEnrichmentService:
         flood_task = asyncio.create_task(self._fetch_flood_risk(property_obj))
         hud_task = asyncio.create_task(self._fetch_hud_data(property_obj))
         
+        # Add property data fetch (ATTOM or LA County Assessor)
+        property_data_task = None
+        if use_premium_apis and settings.attom_api_key:
+            # Use ATTOM for premium access
+            attom_task = asyncio.create_task(self._fetch_attom_data(property_obj))
+            property_data_task = attom_task
+            tasks = [demographics_task, flood_task, hud_task, attom_task]
+        elif property_obj.state == "CA" or property_obj.state == "California":
+            # Use LA County Assessor for California properties (free, better coverage)
+            la_county_task = asyncio.create_task(self._fetch_la_county_data(property_obj))
+            property_data_task = la_county_task
+            tasks = [demographics_task, flood_task, hud_task, la_county_task]
+        else:
+            tasks = [demographics_task, flood_task, hud_task]
+        
         # Wait for all to complete
-        demographics_result, flood_result, hud_result = await asyncio.gather(
-            demographics_task,
-            flood_task,
-            hud_task,
-            return_exceptions=True
-        )
+        results = await asyncio.gather(*tasks, return_exceptions=True)
         
         # Handle results (even if some failed)
-        enrichment_results["results"]["demographics"] = demographics_result if not isinstance(demographics_result, Exception) else {"status": "error", "error": str(demographics_result)}
-        enrichment_results["results"]["flood_risk"] = flood_result if not isinstance(flood_result, Exception) else {"status": "error", "error": str(flood_result)}
-        enrichment_results["results"]["hud_data"] = hud_result if not isinstance(hud_result, Exception) else {"status": "error", "error": str(hud_result)}
+        enrichment_results["results"]["demographics"] = results[0] if not isinstance(results[0], Exception) else {"status": "error", "error": str(results[0])}
+        enrichment_results["results"]["flood_risk"] = results[1] if not isinstance(results[1], Exception) else {"status": "error", "error": str(results[1])}
+        enrichment_results["results"]["hud_data"] = results[2] if not isinstance(results[2], Exception) else {"status": "error", "error": str(results[2])}
+        
+        # Handle property data (ATTOM or LA County)
+        if property_data_task and len(results) > 3:
+            property_data_result = results[3] if not isinstance(results[3], Exception) else {"status": "error", "error": str(results[3])}
+            
+            # Determine which source was used
+            if use_premium_apis and settings.attom_api_key:
+                enrichment_results["results"]["attom_data"] = property_data_result
+                
+                # If ATTOM failed or has no data, try LA County as fallback for CA properties
+                if (property_obj.state == "CA" or property_obj.state == "California") and \
+                   (property_data_result.get("status") == "error" or 
+                    not property_data_result.get("data", {}).get("property_detail", {}).get("success")):
+                    logger.info("ATTOM data unavailable, trying LA County Assessor fallback")
+                    la_county_result = await self._fetch_la_county_data(property_obj)
+                    enrichment_results["results"]["la_county_data"] = la_county_result
+            else:
+                enrichment_results["results"]["la_county_data"] = property_data_result
         
         # Step 5: Fetch nearby points of interest (if using premium APIs)
         if use_premium_apis and settings.google_maps_api_key:
-            logger.info("Fetching nearby POIs from Google Places")
+            logger.info("Fetching nearby points of interest from Google Places")
             poi_result = await self._fetch_nearby_pois(property_obj)
-            enrichment_results["results"]["points_of_interest"] = poi_result
+            enrichment_results["results"]["nearby_pois"] = poi_result
+        else:
+            logger.info("Skipping nearby POIs (premium API not enabled)")
+            enrichment_results["results"]["nearby_pois"] = {"status": "skipped", "reason": "premium_apis_not_enabled"}
         
         # Step 6: Update property with enriched data
         await self._update_property_with_enriched_data(property_obj, enrichment_results)
@@ -111,15 +142,14 @@ class PropertyEnrichmentService:
         enrichment_results["status"] = "success"
         enrichment_results["completed_at"] = datetime.utcnow().isoformat()
         
-        logger.info(f"Property enrichment completed for property_id={property_id}")
         return enrichment_results
     
     async def _geocode_address(
-        self,
+        self, 
         property_obj: Property,
-        use_premium: bool
+        use_premium: bool = False
     ) -> Dict[str, Any]:
-        """Geocode property address to get lat/long coordinates"""
+        """Geocode property address to get coordinates"""
         
         address = property_obj.full_address
         
@@ -452,9 +482,11 @@ class PropertyEnrichmentService:
         """
         
         try:
-            # Extract county from HUD crosswalk data if available
+            # Extract state and county information
+            # Use property's state field (2-letter abbreviation like "CA") directly
+            # FEMA API expects state abbreviation, not FIPS code
+            state_code = property_obj.state  # e.g., "CA", "TX", "FL"
             county_fips = None
-            state_code = None
             
             if property_obj.data_sources:
                 try:
@@ -469,12 +501,14 @@ class PropertyEnrichmentService:
                         
                         if len(geoid) >= 5:
                             # GEOID format: SSCCCTTTTTT (State 2 digits + County 3 digits + Tract 6 digits)
-                            state_code = geoid[:2]
+                            # Extract county FIPS (3 digits after state code)
                             county_fips = geoid[2:5]
                 except Exception as e:
                     logger.warning(f"Could not extract county from HUD data: {e}")
             
-            # Step 1: Check for recent flood disasters in the county using OpenFEMA v2
+            logger.info(f"Using state code '{state_code}' for FEMA disaster query")
+            
+            # Step 1: Check for recent flood disasters in the state/county using OpenFEMA v2
             disaster_history = await self._fetch_flood_disaster_history(state_code, county_fips)
             
             # Step 2: For now, estimate flood risk based on disaster history
@@ -508,33 +542,46 @@ class PropertyEnrichmentService:
     
     async def _fetch_flood_disaster_history(self, state_code: Optional[str], county_fips: Optional[str]) -> Dict[str, Any]:
         """
-        Fetch historical flood disaster declarations from OpenFEMA v2 API
+        Fetch comprehensive natural disaster history from OpenFEMA v2 API
+        
+        Includes: Flood, Fire (wildfire), Tornado, Hurricane, Earthquake
+        NOW WITH FULL DISASTER DETAILS for geographic filtering
         """
         try:
             # OpenFEMA v2 Disaster Declarations endpoint
             url = "https://www.fema.gov/api/open/v2/DisasterDeclarationsSummaries"
             
-            # Build filter for flood-related disasters
+            # Build filter for ALL natural disaster types
             filters = []
             
             if state_code:
                 filters.append(f"state eq '{state_code}'")
             
-            # Filter for flood-related incident types
-            flood_types = ["Flood", "Severe Storm(s)", "Hurricane", "Coastal Storm"]
-            incident_filter = " or ".join([f"incidentType eq '{t}'" for t in flood_types])
+            # Comprehensive disaster types
+            disaster_types = [
+                "Flood",
+                "Severe Storm(s)",
+                "Hurricane",
+                "Coastal Storm",
+                "Fire",           # Wildfire
+                "Tornado",
+                "Earthquake",
+                "Typhoon"         # Pacific equivalent of hurricane
+            ]
+            incident_filter = " or ".join([f"incidentType eq '{t}'" for t in disaster_types])
             filters.append(f"({incident_filter})")
             
-            # Only get disasters from last 20 years
+            # Get disasters from last 20 years for reliable risk assessment
             filters.append("declarationDate ge '2004-01-01'")
             
             filter_string = " and ".join(filters)
             
             params = {
                 "$filter": filter_string,
-                "$select": "disasterNumber,declarationDate,incidentType,declarationTitle,ihProgramDeclared,iaProgramDeclared",
+                # Include designatedArea for county-level filtering
+                "$select": "disasterNumber,declarationDate,incidentType,declarationTitle,designatedArea,fipsCountyCode,ihProgramDeclared,iaProgramDeclared",
                 "$orderby": "declarationDate desc",
-                "$top": 50
+                "$top": 100  # Increased to capture more history
             }
             
             async with httpx.AsyncClient() as client:
@@ -544,29 +591,75 @@ class PropertyEnrichmentService:
                     data = response.json()
                     disasters = data.get("DisasterDeclarationsSummaries", [])
                     
-                    flood_count = len([d for d in disasters if "Flood" in d.get("incidentType", "")])
-                    recent_floods = [d for d in disasters[:5]]  # Last 5 disasters
+                    # Categorize disasters by type (store FULL disaster objects for filtering)
+                    flood_disasters = [d for d in disasters if "Flood" in d.get("incidentType", "") or "Storm" in d.get("incidentType", "")]
+                    fire_disasters = [d for d in disasters if "Fire" in d.get("incidentType", "")]
+                    tornado_disasters = [d for d in disasters if "Tornado" in d.get("incidentType", "")]
+                    hurricane_disasters = [d for d in disasters if "Hurricane" in d.get("incidentType", "") or "Typhoon" in d.get("incidentType", "")]
+                    earthquake_disasters = [d for d in disasters if "Earthquake" in d.get("incidentType", "")]
                     
                     return {
                         "total_disasters": len(disasters),
-                        "flood_disasters": flood_count,
-                        "recent_events": recent_floods,
-                        "has_flood_history": flood_count > 0
+                        "flood": {
+                            "count": len(flood_disasters),
+                            "events": flood_disasters,  # Store ALL events for geographic filtering
+                            "recent_events": flood_disasters[:3],
+                            "has_history": len(flood_disasters) > 0
+                        },
+                        "fire": {
+                            "count": len(fire_disasters),
+                            "events": fire_disasters,
+                            "recent_events": fire_disasters[:3],
+                            "has_history": len(fire_disasters) > 0
+                        },
+                        "tornado": {
+                            "count": len(tornado_disasters),
+                            "events": tornado_disasters,
+                            "recent_events": tornado_disasters[:3],
+                            "has_history": len(tornado_disasters) > 0
+                        },
+                        "hurricane": {
+                            "count": len(hurricane_disasters),
+                            "events": hurricane_disasters,
+                            "recent_events": hurricane_disasters[:3],
+                            "has_history": len(hurricane_disasters) > 0
+                        },
+                        "earthquake": {
+                            "count": len(earthquake_disasters),
+                            "events": earthquake_disasters,
+                            "recent_events": earthquake_disasters[:3],
+                            "has_history": len(earthquake_disasters) > 0
+                        },
+                        "data_period": "2004-present",
+                        "state_code": state_code,
+                        "note": "Full event data included for geographic filtering"
                     }
                 else:
                     logger.warning(f"OpenFEMA API returned {response.status_code}")
-                    return {"total_disasters": 0, "flood_disasters": 0, "has_flood_history": False}
+                    return self._empty_disaster_history()
                     
         except Exception as e:
-            logger.error(f"Error fetching flood disaster history: {e}")
-            return {"total_disasters": 0, "flood_disasters": 0, "has_flood_history": False}
+            logger.error(f"Error fetching natural disaster history: {e}")
+            return self._empty_disaster_history()
+    
+    def _empty_disaster_history(self) -> Dict[str, Any]:
+        """Return empty disaster history structure"""
+        return {
+            "total_disasters": 0,
+            "flood": {"count": 0, "recent_events": [], "has_history": False},
+            "fire": {"count": 0, "recent_events": [], "has_history": False},
+            "tornado": {"count": 0, "recent_events": [], "has_history": False},
+            "hurricane": {"count": 0, "recent_events": [], "has_history": False},
+            "earthquake": {"count": 0, "recent_events": [], "has_history": False}
+        }
     
     def _estimate_flood_zone_from_history(self, disaster_history: Dict[str, Any]) -> str:
         """
         Estimate flood zone based on disaster history
         This is a simplified approach - production should use FEMA Flood Map Service
         """
-        flood_count = disaster_history.get("flood_disasters", 0)
+        flood_data = disaster_history.get("flood", {})
+        flood_count = flood_data.get("count", 0)
         
         if flood_count >= 5:
             return "A"  # High risk - multiple flood events
@@ -1020,6 +1113,202 @@ class PropertyEnrichmentService:
             logger.error(f"HUD FMR error: {str(e)}", exc_info=True)
             return {"success": False, "error": str(e)}
     
+    async def _fetch_attom_data(self, property_obj: Property) -> Dict[str, Any]:
+        """
+        Fetch property data from ATTOM API
+        
+        Provides:
+        - Property details (lot size, building characteristics, zoning)
+        - Automated Valuation Model (AVM) - estimated property value
+        - Sales comparables - recent nearby sales
+        """
+        
+        if not settings.attom_api_key:
+            logger.warning("ATTOM API key not configured, skipping ATTOM data fetch")
+            return {
+                "status": "skipped",
+                "reason": "ATTOM API key not configured",
+                "data": {}
+            }
+        
+        try:
+            from app.api_providers.attom_provider import ATTOMProvider
+            
+            attom_provider = ATTOMProvider(api_key=settings.attom_api_key)
+            
+            results = {}
+            
+            # Step 1: Get property details
+            logger.info(f"Fetching ATTOM property details for {property_obj.full_address}")
+            property_detail = await attom_provider.get_property_detail(
+                address=f"{property_obj.street_address}",
+                address2=f"{property_obj.city} {property_obj.state}"
+            )
+            results["property_detail"] = property_detail
+            
+            # Step 2: Get AVM (Automated Valuation Model)
+            logger.info(f"Fetching ATTOM valuation for {property_obj.full_address}")
+            avm_result = await attom_provider.get_avm(
+                address=f"{property_obj.street_address}",
+                address2=f"{property_obj.city} {property_obj.state}"
+            )
+            results["avm"] = avm_result
+            
+            # Step 3: Get sales comparables
+            logger.info(f"Fetching ATTOM sales comparables for {property_obj.full_address}")
+            comps_result = await attom_provider.get_sales_comparables(
+                address=f"{property_obj.street_address}",
+                address2=f"{property_obj.city} {property_obj.state}",
+                radius=0.5  # Half mile radius
+            )
+            results["sales_comparables"] = comps_result
+            
+            # Extract key data for easy access
+            attom_summary = {
+                "property_detail": {
+                    "success": property_detail.get("success", False),
+                    "lot_sqft": property_detail.get("data", {}).get("lot", {}).get("sqft", 0) if property_detail.get("success") else 0,
+                    "building_sqft": property_detail.get("data", {}).get("building", {}).get("sqft", 0) if property_detail.get("success") else 0,
+                    "bedrooms": property_detail.get("data", {}).get("building", {}).get("bedrooms", 0) if property_detail.get("success") else 0,
+                    "bathrooms": property_detail.get("data", {}).get("building", {}).get("bathrooms", 0) if property_detail.get("success") else 0,
+                    "year_built": property_detail.get("data", {}).get("building", {}).get("year_built") if property_detail.get("success") else None,
+                    "zoning": property_detail.get("data", {}).get("zoning", "") if property_detail.get("success") else "",
+                    "land_use": property_detail.get("data", {}).get("land_use", "") if property_detail.get("success") else ""
+                },
+                "valuation": {
+                    "success": avm_result.get("success", False),
+                    "estimated_value": avm_result.get("data", {}).get("amount", 0) if avm_result.get("success") else 0,
+                    "value_range": {
+                        "low": avm_result.get("data", {}).get("low", 0) if avm_result.get("success") else 0,
+                        "high": avm_result.get("data", {}).get("high", 0) if avm_result.get("success") else 0
+                    },
+                    "confidence_score": avm_result.get("data", {}).get("confidence_score") if avm_result.get("success") else None
+                },
+                "market_comps": {
+                    "success": comps_result.get("success", False),
+                    "comp_count": comps_result.get("data", {}).get("count", 0) if comps_result.get("success") else 0,
+                    "median_sale_price": comps_result.get("data", {}).get("median_price", 0) if comps_result.get("success") else 0,
+                    "median_price_per_sqft": comps_result.get("data", {}).get("median_price_per_sqft", 0) if comps_result.get("success") else 0
+                }
+            }
+            
+            return {
+                "status": "success",
+                "source": "attom_data",
+                "data": attom_summary,
+                "raw_results": results
+            }
+            
+        except Exception as e:
+            logger.error(f"ATTOM API error: {str(e)}", exc_info=True)
+            return {
+                "status": "error",
+                "error": str(e),
+                "data": {}
+            }
+    
+    async def _fetch_la_county_data(self, property_obj: Property) -> Dict[str, Any]:
+        """
+        Fetch property data from LA County Assessor API
+        
+        Provides free alternative to ATTOM for Los Angeles County properties:
+        - Lot size (square footage and acreage)
+        - Assessed values (land, improvement, total)
+        - Year built
+        - Property use type
+        - Building characteristics
+        
+        Coverage: Los Angeles County only
+        Cost: FREE (public data)
+        """
+        
+        try:
+            from app.api_clients.la_county_assessor import \
+                LACountyAssessorClient
+            
+            logger.info(f"Fetching LA County Assessor data for {property_obj.full_address}")
+            
+            # Initialize client
+            la_client = LACountyAssessorClient()
+            
+            try:
+                # Fetch property data by address
+                result = await la_client.get_property_by_address(
+                    street_address=property_obj.street_address,
+                    city=property_obj.city,
+                    zip_code=property_obj.zip_code
+                )
+                
+                if not result.get("success"):
+                    logger.warning(f"LA County Assessor API returned no data: {result.get('error')}")
+                    return {
+                        "status": "no_data",
+                        "reason": result.get("error", "Property not found"),
+                        "data": {}
+                    }
+                
+                # Extract key fields for property model
+                la_county_summary = {
+                    "identification": {
+                        "ain": result.get("ain"),
+                        "assessor_id": result.get("assessor_id"),
+                        "roll_year": result.get("roll_year")
+                    },
+                    "property_characteristics": {
+                        "lot_sqft": result.get("lot_size_sqft"),
+                        "lot_acres": result.get("lot_size_acres"),
+                        "year_built": result.get("year_built"),
+                        "effective_year_built": result.get("effective_year_built"),
+                        "building_sqft": result.get("building_sqft"),
+                        "bedrooms": result.get("bedrooms"),
+                        "bathrooms": result.get("bathrooms"),
+                        "units": result.get("units"),
+                        "number_of_buildings": result.get("number_of_buildings")
+                    },
+                    "valuation": {
+                        "total_assessed_value": result.get("assessed_value"),
+                        "land_value": result.get("land_value"),
+                        "improvement_value": result.get("improvement_value"),
+                        "fixture_value": result.get("fixture_value")
+                    },
+                    "property_use": {
+                        "use_type": result.get("use_type"),
+                        "use_code": result.get("use_code"),
+                        "classification": result.get("classification"),
+                        "general_use": result.get("general_use")
+                    },
+                    "location": {
+                        "address": result.get("address"),
+                        "latitude": result.get("latitude"),
+                        "longitude": result.get("longitude")
+                    },
+                    "dates": {
+                        "last_recording_date": result.get("last_recording_date"),
+                        "query_date": result.get("query_date")
+                    }
+                }
+                
+                logger.info(f"Successfully retrieved LA County data. Lot size: {result.get('lot_size_sqft')} sqft")
+                
+                return {
+                    "status": "success",
+                    "source": "la_county_assessor",
+                    "data": la_county_summary,
+                    "raw_result": result
+                }
+                
+            finally:
+                # Clean up client
+                await la_client.close()
+            
+        except Exception as e:
+            logger.error(f"LA County Assessor API error: {str(e)}", exc_info=True)
+            return {
+                "status": "error",
+                "error": str(e),
+                "data": {}
+            }
+    
     async def _fetch_nearby_pois(self, property_obj: Property) -> Dict[str, Any]:
         """Fetch nearby points of interest from Google Places"""
         
@@ -1069,10 +1358,60 @@ class PropertyEnrichmentService:
         property_obj.data_sources = json.dumps(enrichment_results["results"])
         property_obj.last_data_update = datetime.utcnow()
         
-        # Extract and store specific fields
+        # Extract and store specific fields from various sources
+        
+        # Flood risk data
         flood_data = enrichment_results["results"].get("flood_risk", {}).get("data", {})
         if flood_data.get("flood_zone"):
             property_obj.flood_zone = flood_data["flood_zone"]
+        
+        # ATTOM data - update property details if available
+        attom_data = enrichment_results["results"].get("attom_data", {}).get("data", {})
+        if attom_data and attom_data.get("property_detail", {}).get("success"):
+            detail = attom_data["property_detail"]
+            
+            # Update property fields with ATTOM data (if not already set)
+            if detail.get("lot_sqft") and not property_obj.lot_size_sqft:
+                property_obj.lot_size_sqft = detail["lot_sqft"]
+            
+            if detail.get("building_sqft") and not property_obj.building_sqft:
+                property_obj.building_sqft = detail["building_sqft"]
+            
+            if detail.get("year_built") and not property_obj.year_built:
+                property_obj.year_built = detail["year_built"]
+            
+            if detail.get("zoning"):
+                property_obj.zoning = detail["zoning"]
+        
+        # Store ATTOM valuation as market value estimate
+        if attom_data and attom_data.get("valuation", {}).get("success"):
+            valuation = attom_data["valuation"]
+            if valuation.get("estimated_value") and valuation["estimated_value"] > 0:
+                property_obj.market_value_estimate = valuation["estimated_value"]
+        
+        # LA County Assessor data - update property details if available (CA properties)
+        la_county_data = enrichment_results["results"].get("la_county_data", {}).get("data", {})
+        if la_county_data and enrichment_results["results"].get("la_county_data", {}).get("status") == "success":
+            characteristics = la_county_data.get("property_characteristics", {})
+            valuation = la_county_data.get("valuation", {})
+            
+            # Update property fields with LA County data (if not already set)
+            if characteristics.get("lot_sqft") and not property_obj.lot_size_sqft:
+                property_obj.lot_size_sqft = characteristics["lot_sqft"]
+                # Calculate lot_size_acres from sqft (1 acre = 43,560 sqft)
+                property_obj.lot_size_acres = round(characteristics["lot_sqft"] / 43560, 2)
+                logger.info(f"Updated lot_size from LA County: {characteristics['lot_sqft']:,} sqft ({property_obj.lot_size_acres} acres)")
+            
+            if characteristics.get("building_sqft") and not property_obj.building_sqft:
+                property_obj.building_sqft = characteristics["building_sqft"]
+            
+            if characteristics.get("year_built") and not property_obj.year_built:
+                property_obj.year_built = characteristics["year_built"]
+            
+            # Store LA County assessed value (if ATTOM not available)
+            if valuation.get("total_assessed_value") and not property_obj.assessed_value:
+                property_obj.assessed_value = valuation["total_assessed_value"]
+                logger.info(f"Updated assessed_value from LA County: ${valuation['total_assessed_value']:,}")
         
         await self.db.commit()
         logger.info(f"Updated property {property_obj.id} with enriched data")

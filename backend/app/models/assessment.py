@@ -60,6 +60,11 @@ class Assessment(BaseModel, UUIDMixin):
     preferred_unit_types = Column(Text, nullable=True)  # JSON: ["studio", "1br", "2br"]
     affordability_target = Column(String(50), nullable=True)  # "30_ami", "60_ami", "80_ami"
     
+    # Available Space for Development (Client-Provided)
+    available_build_sqft = Column(Float, nullable=True)  # Square footage available for housing development
+    available_build_acres = Column(Float, nullable=True)  # Acres available for housing (auto-calculated from sqft)
+    build_area_notes = Column(Text, nullable=True)  # Additional context about available space (e.g., "Southeast corner of parking lot")
+    
     # Partnership Terms
     revenue_sharing_preference = Column(String(50), nullable=True)
     development_involvement_level = Column(String(50), nullable=True)

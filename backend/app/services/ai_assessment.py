@@ -205,9 +205,15 @@ Provide a score and brief analysis (2-3 sentences)."""
             
             ai_response = response.choices[0].message.content
             
-            # Extract score from response (look for number between 0-100)
+            # Extract score - look for "Score: XX" or "XX/100" pattern
             import re
-            score_match = re.search(r'\b(\d{1,3})\b', ai_response)
+            score_match = re.search(r'(?:Location Score|Score):\s*(\d{1,3})(?:/100)?', ai_response, re.IGNORECASE)
+            if not score_match:
+                score_match = re.search(r'(\d{1,3})/100', ai_response)
+            if not score_match:
+                # Last resort: look for standalone number, skip section numbers
+                score_match = re.search(r'(?<!\d)(\d{2,3})(?!\.)(?:/100)?', ai_response)
+            
             score = float(score_match.group(1)) if score_match else 70.0
             score = min(100, max(0, score))  # Clamp to 0-100
             
@@ -305,21 +311,30 @@ Provide a market demand score (0-100) and brief analysis."""
         score = 70.0
         
         try:
-            # Get AI analysis
+            # Get AI analysis using GPT-4o for comprehensive market analysis
+            # (gpt-4o-mini with 300 tokens was truncating the response)
             response = await self.client.chat.completions.create(
-                model=settings.openai_model,
+                model="gpt-4o",  # Using GPT-4o for detailed analysis
                 messages=[
                     {"role": "system", "content": "You are a housing market analyst specializing in affordable housing demand assessment."},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.3,
-                max_tokens=300
+                max_tokens=3000  # Increased from 300 to allow complete analysis
             )
             
             ai_response = response.choices[0].message.content
             
+            # Extract score - look for "Market Demand Score: XX/100" or "Score: XX"
             import re
-            score_match = re.search(r'\b(\d{1,3})\b', ai_response)
+            score_match = re.search(r'(?:Market Demand Score|Score):\s*(\d{1,3})(?:/100)?', ai_response, re.IGNORECASE)
+            if not score_match:
+                # Fallback: look for pattern like "85/100" at end of response
+                score_match = re.search(r'(\d{1,3})/100', ai_response)
+            if not score_match:
+                # Last resort: look for standalone number, but skip section numbers (1., 2., etc)
+                score_match = re.search(r'(?<!\d)(\d{2,3})(?!\.)(?:/100)?', ai_response)
+            
             score = float(score_match.group(1)) if score_match else 70.0
             score = min(100, max(0, score))
             
@@ -601,7 +616,16 @@ Provide a market demand score (0-100) and brief analysis."""
         # Get enrichment data for FMR and flood risk
         enrichment_data = self._extract_enrichment_data(property_obj)
         
-        lot_size_sqft = property_obj.lot_size_sqft or 0
+        # PRIORITY: Use client-specified available build space if provided, otherwise use total lot size
+        # This allows churches to specify a portion of their property for development
+        if assessment.available_build_sqft and assessment.available_build_sqft > 0:
+            lot_size_sqft = assessment.available_build_sqft
+            using_available_space = True
+            logger.info(f"Using client-specified available build space: {lot_size_sqft:,} sq ft")
+        else:
+            lot_size_sqft = property_obj.lot_size_sqft or 0
+            using_available_space = False
+            logger.info(f"Using total lot size from property data: {lot_size_sqft:,} sq ft")
         
         if lot_size_sqft < 10000:
             logger.warning(f"Property {property_obj.id} disqualified: {lot_size_sqft} sq ft < 10,000 sq ft minimum")
@@ -611,23 +635,42 @@ Provide a market demand score (0-100) and brief analysis."""
                 "disqualification_reason": "Below Logos minimum lot size requirement",
                 "lot_size_sqft": lot_size_sqft,
                 "minimum_required_sqft": 10000,
+                "using_available_space": using_available_space,
                 "note": "Property does not meet Logos Faith Development's 10,000 sq ft minimum threshold"
             }
         
-        unit_capacity_info = self._calculate_unit_capacity(property_obj)
+        # Calculate unit capacity using the determined lot size (available space or total)
+        unit_capacity_info = self._calculate_unit_capacity(property_obj, lot_size_sqft_override=lot_size_sqft)
         feasible_units = unit_capacity_info["feasible_units"]
         within_target_range = 40 <= feasible_units <= 140
         
         cost_per_unit_info = self._estimate_cost_per_unit(property_obj, feasible_units)
         cost_per_unit = cost_per_unit_info["cost_per_unit"]
         
-        flood_analysis = self._analyze_flood_risk(enrichment_data)
+        # Pass property location data for geographic disaster filtering
+        flood_analysis = self._analyze_flood_risk(
+            enrichment_data,
+            property_lat=property_obj.latitude,
+            property_lon=property_obj.longitude,
+            property_county=property_obj.county,
+            property_state=property_obj.state
+        )
         flood_cost_per_unit = flood_analysis.get("mitigation_cost_per_unit", 0)
         total_flood_costs = flood_cost_per_unit * feasible_units
         
         adjusted_cost_per_unit = cost_per_unit + flood_cost_per_unit
         
         score = 75.0
+        
+        # BONUS: Larger available space = better score (proportional to size above minimum)
+        # Score increases for every 10,000 sqft above the minimum, up to +15 points
+        if lot_size_sqft >= 10000:
+            excess_sqft = lot_size_sqft - 10000
+            # Award 1 point per 5,000 sqft above minimum (max +15 points at 85,000 sqft)
+            size_bonus = min(15, (excess_sqft / 5000) * 1)
+            if size_bonus > 0:
+                score += size_bonus
+                logger.info(f"✓ Property {property_obj.id}: Size bonus +{size_bonus:.1f} points for {lot_size_sqft:,} sqft")
         
         if within_target_range:
             score += 15
@@ -678,8 +721,12 @@ Provide a market demand score (0-100) and brief analysis."""
             "disqualified": False,
             
             "lot_size_sqft": lot_size_sqft,
-            "lot_size_acres": property_obj.lot_size_acres,
+            "lot_size_acres": lot_size_sqft / 43560 if lot_size_sqft > 0 else None,
             "meets_minimum": True,
+            "using_available_space": using_available_space,
+            "available_build_sqft": assessment.available_build_sqft if using_available_space else None,
+            "total_lot_size_sqft": property_obj.lot_size_sqft,
+            "build_area_notes": assessment.build_area_notes if using_available_space else None,
             
             "unit_capacity": unit_capacity_info,
             "feasible_units": feasible_units,
@@ -806,14 +853,19 @@ Provide a market demand score (0-100) and brief analysis."""
             ]
         }
     
-    def _calculate_unit_capacity(self, property_obj: Property) -> Dict[str, Any]:
+    def _calculate_unit_capacity(self, property_obj: Property, lot_size_sqft_override: Optional[float] = None) -> Dict[str, Any]:
         """
         Calculate feasible unit count based on lot size and density assumptions.
         
         Logos targets: 40-140 units per property
+        
+        Args:
+            property_obj: Property object
+            lot_size_sqft_override: Optional override for lot size (e.g., available build space)
         """
-        lot_size_sqft = property_obj.lot_size_sqft or 0
-        lot_size_acres = property_obj.lot_size_acres or 0
+        # Use override if provided (client-specified available space), otherwise use property lot size
+        lot_size_sqft = lot_size_sqft_override if lot_size_sqft_override is not None else (property_obj.lot_size_sqft or 0)
+        lot_size_acres = lot_size_sqft / 43560 if lot_size_sqft > 0 else (property_obj.lot_size_acres or 0)
         
         units_per_acre = 45
         site_coverage_factor = 0.85
@@ -918,23 +970,34 @@ Provide a market demand score (0-100) and brief analysis."""
         church: Church,
         assessment: Assessment
     ) -> tuple[float, Dict[str, Any]]:
-        """Analyze church-developer partnership fit"""
+        """
+        Analyze church-developer partnership fit
+        
+        LOGOS MODEL: Church provides land + support, Logos brings expertise
+        Church development experience is NOT required (actually preferred they don't!)
+        """
         
         score = 70.0
         
+        # Church provides congregation support (critical!)
         if assessment.congregation_approval:
             score += 15
         
-        if assessment.leadership_support in ["unanimous", "majority"]:
+        # Leadership alignment (very important)
+        if assessment.leadership_support in ["unanimous", "majority", "strong"]:
             score += 10
         elif assessment.leadership_support == "mixed":
             score += 5
         
+        # Timeline readiness
         if assessment.timeline_readiness in ["ready_now", "6_months"]:
             score += 10
-        
-        if church.previous_development_experience:
+        elif assessment.timeline_readiness in ["1_year", "12_months"]:
             score += 5
+        
+        # Church owns land (HUGE benefit - zero acquisition cost)
+        if property_obj.church_id:
+            score += 5  # Bonus for church land ownership
         
         score = min(100, max(0, score))
         
@@ -944,8 +1007,11 @@ Provide a market demand score (0-100) and brief analysis."""
                 "congregation_approval": assessment.congregation_approval,
                 "leadership_support": assessment.leadership_support,
                 "timeline_readiness": assessment.timeline_readiness,
-                "previous_experience": church.previous_development_experience
+                "land_ownership": "Church owns land (zero acquisition cost)"
             },
+            "partnership_model": "Logos Development + Church Partnership",
+            "church_role": "Land owner + Community support",
+            "logos_role": "Development expertise + Financing + Construction + Management",
             "partnership_structure": assessment.revenue_sharing_preference or "to_be_determined"
         }
         
@@ -972,7 +1038,14 @@ Provide a market demand score (0-100) and brief analysis."""
             score -= 10
             risks.append("May require zoning change or variance")
         
-        flood_analysis = self._analyze_flood_risk(enrichment_data)
+        # Pass property location data for geographic filtering
+        flood_analysis = self._analyze_flood_risk(
+            enrichment_data,
+            property_lat=property_obj.latitude,
+            property_lon=property_obj.longitude,
+            property_county=property_obj.county,
+            property_state=property_obj.state
+        )
         score -= flood_analysis["score_penalty"]
         if flood_analysis["risks"]:
             risks.extend(flood_analysis["risks"])
@@ -987,9 +1060,12 @@ Provide a market demand score (0-100) and brief analysis."""
             score -= 15
             risks.append("Environmental concerns noted")
         
-        if not church.previous_development_experience:
-            score -= 5
-            risks.append("Church lacks development experience")
+        # NOTE: Church development experience is NOT a risk factor
+        # Logos Development brings the expertise as the development partner
+        # Church provides land + community support (their actual role)
+        # if not church.previous_development_experience:
+        #     score -= 5
+        #     risks.append("Church lacks development experience")
         
         score = min(100, max(0, score))
         
@@ -1005,9 +1081,17 @@ Provide a market demand score (0-100) and brief analysis."""
         
         return score, analysis
     
-    def _analyze_flood_risk(self, enrichment_data: Dict[str, Any]) -> Dict[str, Any]:
+    def _analyze_flood_risk(
+        self,
+        enrichment_data: Dict[str, Any],
+        property_lat: float = None,
+        property_lon: float = None,
+        property_county: str = None,
+        property_state: str = None
+    ) -> Dict[str, Any]:
         """
         Analyze FEMA flood risk data and calculate mitigation costs
+        NOW INCLUDES COMPREHENSIVE NATURAL DISASTER ASSESSMENT WITH GEOGRAPHIC FILTERING
         
         Scoring Impact:
         - Zone X/C (minimal risk): 0 penalty
@@ -1016,75 +1100,562 @@ Provide a market demand score (0-100) and brief analysis."""
         - No data: -5 points (uncertainty penalty)
         """
         
+        # Call comprehensive natural disaster assessment WITH LOCATION DATA
+        comprehensive = self._analyze_natural_disaster_risk(
+            enrichment_data,
+            property_lat=property_lat,
+            property_lon=property_lon,
+            property_county=property_county,
+            property_state=property_state
+        )
+        flood_detail = comprehensive["disaster_risks"].get("flood", {})
+        
+        # Return legacy format for backward compatibility
+        return {
+            "score_penalty": comprehensive["total_score_penalty"],
+            "risk_level": comprehensive["overall_risk_level"],
+            "flood_zone": flood_detail.get("flood_zone", "Unknown"),
+            "risks": comprehensive["combined_risks"],
+            "mitigation_cost": 0,
+            "mitigation_cost_per_unit": comprehensive["total_mitigation_cost_per_unit"],
+            "recommendation": comprehensive["recommendation"],
+            "disaster_breakdown": comprehensive["disaster_risks"]
+        }
+    
+    def _analyze_natural_disaster_risk(
+        self,
+        enrichment_data: Dict[str, Any],
+        property_lat: float = None,
+        property_lon: float = None,
+        property_county: str = None,
+        property_state: str = None
+    ) -> Dict[str, Any]:
+        """
+        Comprehensive natural disaster risk assessment WITH GEOGRAPHIC FILTERING
+        
+        Analyzes: Flood, Fire (wildfire), Tornado, Hurricane, Earthquake
+        NOW filters disasters by distance to prevent false positives
+        (e.g., downtown LA penalized for rural wildfires 300 miles away)
+        
+        Returns combined risk score, mitigation costs, and recommendations
+        """
+        
         fema_data = enrichment_data.get("fema", {})
         
-        if not fema_data or not fema_data.get("success"):
+        if not fema_data or not fema_data.get("status") == "success":
             return {
-                "score_penalty": 5,
-                "risk_level": "unknown",
-                "flood_zone": "Unknown",
-                "risks": ["Flood risk unknown - requires FEMA flood zone verification"],
-                "mitigation_cost": 0,
-                "mitigation_cost_per_unit": 0
+                "total_score_penalty": 5,
+                "overall_risk_level": "unknown",
+                "disaster_risks": {},
+                "combined_risks": ["Natural disaster risk unknown - requires FEMA verification"],
+                "total_mitigation_cost_per_unit": 0,
+                "recommendation": "Conduct comprehensive natural disaster risk assessment"
             }
         
-        flood_zone = fema_data.get("flood_zone", "Unknown")
+        # Extract data from FEMA enrichment structure
+        fema_content = fema_data.get("data", {})
+        disaster_history = fema_content.get("disaster_history", {})
+        flood_zone = fema_content.get("flood_zone", "Unknown")
         
-        if flood_zone in ["X", "C", "B"]:
+        # Analyze each disaster type WITH GEOGRAPHIC CONTEXT
+        flood_risk = self._analyze_flood_risk_detail(flood_zone, disaster_history.get("flood", {}))
+        fire_risk = self._analyze_fire_risk(
+            disaster_history.get("fire", {}),
+            property_lat=property_lat,
+            property_lon=property_lon,
+            property_county=property_county
+        )
+        tornado_risk = self._analyze_tornado_risk(disaster_history.get("tornado", {}))
+        hurricane_risk = self._analyze_hurricane_risk(
+            disaster_history.get("hurricane", {}),
+            property_state=property_state,
+            property_county=property_county
+        )
+        earthquake_risk = self._analyze_earthquake_risk(
+            disaster_history.get("earthquake", {}),
+            property_state=property_state
+        )
+        
+        # Combine results
+        total_penalty = (
+            flood_risk["score_penalty"] +
+            fire_risk["score_penalty"] +
+            tornado_risk["score_penalty"] +
+            hurricane_risk["score_penalty"] +
+            earthquake_risk["score_penalty"]
+        )
+        
+        total_mitigation_cost = (
+            flood_risk["mitigation_cost_per_unit"] +
+            fire_risk["mitigation_cost_per_unit"] +
+            tornado_risk["mitigation_cost_per_unit"] +
+            hurricane_risk["mitigation_cost_per_unit"] +
+            earthquake_risk["mitigation_cost_per_unit"]
+        )
+        
+        combined_risks = []
+        for risk in [flood_risk, fire_risk, tornado_risk, hurricane_risk, earthquake_risk]:
+            combined_risks.extend(risk.get("risks", []))
+        
+        # Determine overall risk level
+        high_risk_count = sum(1 for r in [flood_risk, fire_risk, tornado_risk, hurricane_risk, earthquake_risk] 
+                              if r["risk_level"] in ["high", "very_high"])
+        
+        if high_risk_count >= 2:
+            overall_risk_level = "very_high"
+        elif high_risk_count == 1:
+            overall_risk_level = "high"
+        elif total_penalty > 10:
+            overall_risk_level = "moderate"
+        else:
+            overall_risk_level = "low"
+        
+        return {
+            "total_score_penalty": min(40, total_penalty),  # Cap at 40 points
+            "overall_risk_level": overall_risk_level,
+            "disaster_risks": {
+                "flood": flood_risk,
+                "fire": fire_risk,
+                "tornado": tornado_risk,
+                "hurricane": hurricane_risk,
+                "earthquake": earthquake_risk
+            },
+            "combined_risks": combined_risks,
+            "total_mitigation_cost_per_unit": total_mitigation_cost,
+            "recommendation": self._get_disaster_recommendation(overall_risk_level, high_risk_count)
+        }
+    
+    def _analyze_flood_risk_detail(self, flood_zone: str, flood_history: Dict[str, Any]) -> Dict[str, Any]:
+        """Detailed flood risk analysis"""
+        
+        event_count = flood_history.get("count", 0)
+        
+        if flood_zone in ["X", "C", "B"] and event_count == 0:
             return {
+                "type": "flood",
                 "score_penalty": 0,
                 "risk_level": "minimal",
                 "flood_zone": flood_zone,
+                "event_count": event_count,
                 "risks": [],
-                "mitigation_cost": 0,
-                "mitigation_cost_per_unit": 0,
-                "recommendation": "No special flood mitigation required"
+                "mitigation_cost_per_unit": 0
             }
         
         elif any(flood_zone.startswith(prefix) for prefix in ["A", "AE", "AH", "AO"]):
-            cost_per_unit = 50000
             return {
-                "score_penalty": 20,
-                "risk_level": "high",
+                "type": "flood",
+                "score_penalty": 5,  # Reduced from 10 - informational focus
+                "risk_level": "moderate",
                 "flood_zone": flood_zone,
+                "event_count": event_count,
                 "risks": [
-                    f"Flood Zone {flood_zone} requires elevated construction",
-                    "Additional insurance costs for tenants",
-                    "May limit financing options"
+                    f"ℹ️ FEMA Flood Zone {flood_zone} (1% annual flood chance)",
+                    "Requires elevated construction (+$15K-$25K per unit)",
+                    "Mandatory flood insurance required"
                 ],
-                "mitigation_cost_per_unit": cost_per_unit,
-                "mitigation_cost": 0,
-                "recommendation": "Requires elevated construction to 2ft above Base Flood Elevation (BFE)",
-                "typical_bfe_elevation": "Verify BFE from FEMA Flood Insurance Rate Map (FIRM)"
+                "mitigation_cost_per_unit": 20000
             }
         
         elif flood_zone.startswith("V"):
-            cost_per_unit = 75000
             return {
-                "score_penalty": 30,
-                "risk_level": "very_high",
+                "type": "flood",
+                "score_penalty": 15,  # Reduced from 30 - still significant but not crushing
+                "risk_level": "high",  # Downgraded from very_high
                 "flood_zone": flood_zone,
+                "event_count": event_count,
                 "risks": [
-                    f"Coastal Flood Zone {flood_zone} requires special engineering",
+                    f"⚠️ Coastal High Hazard Zone {flood_zone}",
                     "Must be elevated on pilings/columns",
-                    "Significantly higher insurance costs",
-                    "May not be suitable for affordable housing"
+                    "High insurance costs expected"
                 ],
-                "mitigation_cost_per_unit": cost_per_unit,
-                "mitigation_cost": 0,
-                "recommendation": "Consider alternative sites - V zone development very challenging for affordable housing"
+                "mitigation_cost_per_unit": 75000
             }
         
         else:
             return {
-                "score_penalty": 10,
-                "risk_level": "uncertain",
+                "type": "flood",
+                "score_penalty": 5,
+                "risk_level": "unknown",
                 "flood_zone": flood_zone,
-                "risks": [f"Unusual flood zone designation ({flood_zone}) - requires professional evaluation"],
-                "mitigation_cost": 0,
-                "mitigation_cost_per_unit": 0,
-                "recommendation": "Consult civil engineer and FEMA flood specialist"
+                "event_count": event_count,
+                "risks": ["Flood risk requires verification"],
+                "mitigation_cost_per_unit": 0
             }
+    
+    def _analyze_fire_risk(
+        self,
+        fire_history: Dict[str, Any],
+        property_lat: float = None,
+        property_lon: float = None,
+        property_county: str = None
+    ) -> Dict[str, Any]:
+        """
+        Wildfire risk analysis with GEOGRAPHIC FILTERING
+        
+        Prevents false positives like urban LA being penalized for rural fires
+        """
+        from app.services.disaster_distance_filter import \
+            DisasterDistanceFilter
+        
+        event_count = fire_history.get("count", 0)
+        all_events = fire_history.get("events", [])
+        
+        if event_count == 0:
+            return {
+                "type": "fire",
+                "score_penalty": 0,
+                "risk_level": "minimal",
+                "event_count": 0,
+                "event_count_nearby": 0,
+                "risks": [],
+                "mitigation_cost_per_unit": 0,
+                "geographic_context": "No wildfire events in state"
+            }
+        
+        # Apply geographic filtering if location data available
+        if property_lat and property_lon and all_events:
+            filtered = DisasterDistanceFilter.filter_disasters_by_distance(
+                disasters=all_events,
+                disaster_type='fire',
+                property_lat=property_lat,
+                property_lon=property_lon,
+                property_county=property_county
+            )
+            
+            # Use DIRECT RISK events only for scoring
+            nearby_count = filtered['direct_count']
+            regional_count = filtered['regional_count']
+            direct_threshold = filtered['thresholds_miles']['direct']
+            
+            context = DisasterDistanceFilter.get_risk_context_message(
+                disaster_type='fire',
+                filtered_data=filtered,
+                property_location=property_county or "this location"
+            )
+            
+            # Score based on nearby events - REDUCED PENALTIES (informational focus)
+            # County-level data means we can't pinpoint exact fire locations
+            # So we keep penalties low and focus on providing information
+            if nearby_count == 0:
+                return {
+                    "type": "fire",
+                    "score_penalty": 0,
+                    "risk_level": "minimal",
+                    "event_count": event_count,
+                    "event_count_nearby": nearby_count,
+                    "event_count_regional": regional_count,
+                    "risks": [],
+                    "mitigation_cost_per_unit": 0,
+                    "geographic_context": context,
+                    "note": f"{event_count} statewide events, NONE in county"
+                }
+            elif nearby_count >= 5:
+                # County has significant fire history - LIGHT penalty, show info
+                return {
+                    "type": "fire",
+                    "score_penalty": 3,  # Reduced from 15
+                    "risk_level": "informational",
+                    "event_count": event_count,
+                    "event_count_nearby": nearby_count,
+                    "event_count_regional": regional_count,
+                    "risks": [
+                        f"ℹ️ {nearby_count} wildfire events in county since 2004",
+                        f"📍 Note: County-level data (actual distance to fires unknown)",
+                        "✓ Recommend fire-resistant materials as best practice",
+                        "✓ Verify insurance requirements with local providers"
+                    ],
+                    "mitigation_cost_per_unit": 3000,  # Reduced from 8000
+                    "geographic_context": context,
+                    "note": "Informational only - county has fire history but exact property risk depends on specific location"
+                }
+            else:
+                # Some county fire history - MINIMAL penalty
+                return {
+                    "type": "fire",
+                    "score_penalty": 1,  # Reduced from 5
+                    "risk_level": "low",
+                    "event_count": event_count,
+                    "event_count_nearby": nearby_count,
+                    "event_count_regional": regional_count,
+                    "risks": [
+                        f"ℹ️ {nearby_count} wildfire events in county since 2004",
+                        "✓ Standard fire safety practices recommended"
+                    ],
+                    "mitigation_cost_per_unit": 1000,  # Reduced from 3000
+                    "geographic_context": context,
+                    "note": "County has limited fire history"
+                }
+        
+        # Fallback: use statewide counts (if no location data)
+        # Apply same reduced penalties - informational focus
+        if event_count >= 5:
+            return {
+                "type": "fire",
+                "score_penalty": 3,  # Reduced from 15
+                "risk_level": "informational",
+                "event_count": event_count,
+                "event_count_nearby": 0,
+                "risks": [
+                    f"ℹ️ {event_count} wildfire events in state since 2004",
+                    "📍 Geographic filtering unavailable - verify local risk",
+                    "✓ Recommend fire-resistant construction as best practice"
+                ],
+                "mitigation_cost_per_unit": 3000,  # Reduced from 8000
+                "geographic_context": "Geographic filtering not available - statewide data shown for reference"
+            }
+        else:
+            return {
+                "type": "fire",
+                "score_penalty": 1,  # Reduced from 5
+                "risk_level": "low",
+                "event_count": event_count,
+                "event_count_nearby": 0,
+                "risks": [
+                    f"ℹ️ {event_count} wildfire event(s) in state since 2004",
+                    "✓ Standard fire safety practices recommended"
+                ],
+                "mitigation_cost_per_unit": 1000,  # Reduced from 3000
+                "geographic_context": "Geographic filtering not available - statewide data shown for reference"
+            }
+    
+    def _analyze_tornado_risk(self, tornado_history: Dict[str, Any]) -> Dict[str, Any]:
+        """Tornado risk analysis"""
+        
+        event_count = tornado_history.get("count", 0)
+        
+        if event_count == 0:
+            return {
+                "type": "tornado",
+                "score_penalty": 0,
+                "risk_level": "minimal",
+                "event_count": 0,
+                "risks": [],
+                "mitigation_cost_per_unit": 0
+            }
+        elif event_count >= 5:
+            return {
+                "type": "tornado",
+                "score_penalty": 12,
+                "risk_level": "high",
+                "event_count": event_count,
+                "risks": [
+                    f"{event_count} tornado declarations since 2004",
+                    "Requires enhanced structural reinforcement",
+                    "Safe rooms/storm shelters required",
+                    "Higher construction standards"
+                ],
+                "mitigation_cost_per_unit": 10000  # Reinforced framing, safe rooms
+            }
+        else:
+            return {
+                "type": "tornado",
+                "score_penalty": 5,
+                "risk_level": "moderate",
+                "event_count": event_count,
+                "risks": [
+                    f"{event_count} tornado declaration(s) since 2004",
+                    "Consider enhanced wind resistance"
+                ],
+                "mitigation_cost_per_unit": 4000
+            }
+    
+    def _analyze_hurricane_risk(
+        self, 
+        hurricane_history: Dict[str, Any],
+        property_state: str = None,
+        property_county: str = None
+    ) -> Dict[str, Any]:
+        """
+        Hurricane risk analysis WITH GEOGRAPHIC FILTERING
+        
+        IMPORTANT: Hurricanes are COASTAL events (Gulf/Atlantic states)
+        California, Nevada, Arizona, etc. should show ZERO hurricane risk
+        even if state has historical tropical storm remnants
+        """
+        
+        event_count = hurricane_history.get("count", 0)
+        
+        # GEOGRAPHIC FILTER: Hurricane-prone states (coastal Gulf/Atlantic)
+        HURRICANE_STATES = [
+            "FL", "LA", "TX", "MS", "AL", "GA", "SC", "NC", "VA", "MD", 
+            "DE", "NJ", "NY", "CT", "RI", "MA", "NH", "ME", "HI"
+        ]
+        
+        # If NOT in hurricane-prone state, return ZERO risk even if state has events
+        if property_state and property_state not in HURRICANE_STATES:
+            if event_count > 0:
+                return {
+                    "type": "hurricane",
+                    "score_penalty": 0,
+                    "risk_level": "not_applicable",
+                    "event_count": event_count,
+                    "risks": [],
+                    "mitigation_cost_per_unit": 0,
+                    "geographic_context": f"Hurricane risk: NOT APPLICABLE for {property_state}. {event_count} statewide tropical storm remnants listed for reference only. This is NOT a hurricane zone.",
+                    "note": f"{event_count} statewide event(s) were tropical storm remnants, NOT hurricanes"
+                }
+            else:
+                return {
+                    "type": "hurricane",
+                    "score_penalty": 0,
+                    "risk_level": "not_applicable",
+                    "event_count": 0,
+                    "risks": [],
+                    "mitigation_cost_per_unit": 0,
+                    "geographic_context": f"Hurricane risk: NOT APPLICABLE for {property_state}"
+                }
+        
+        # Only assess hurricane risk for coastal states
+        if event_count == 0:
+            return {
+                "type": "hurricane",
+                "score_penalty": 0,
+                "risk_level": "minimal",
+                "event_count": 0,
+                "risks": [],
+                "mitigation_cost_per_unit": 0
+            }
+        elif event_count >= 3:
+            return {
+                "type": "hurricane",
+                "score_penalty": 15,
+                "risk_level": "high",
+                "event_count": event_count,
+                "risks": [
+                    f"{event_count} hurricane declarations since 2004",
+                    "Requires hurricane-rated windows/doors",
+                    "Enhanced roof tie-downs",
+                    "Impact-resistant materials",
+                    "Higher insurance costs"
+                ],
+                "mitigation_cost_per_unit": 12000  # Hurricane windows, reinforced roof
+            }
+        else:
+            return {
+                "type": "hurricane",
+                "score_penalty": 6,
+                "risk_level": "moderate",
+                "event_count": event_count,
+                "risks": [
+                    f"{event_count} hurricane declaration(s) since 2004",
+                    "Consider wind-resistant construction"
+                ],
+                "mitigation_cost_per_unit": 5000
+            }
+    
+    def _analyze_earthquake_risk(
+        self, 
+        earthquake_history: Dict[str, Any],
+        property_state: str = None
+    ) -> Dict[str, Any]:
+        """
+        Earthquake risk analysis WITH GEOGRAPHIC CONTEXT
+        
+        NOTE: California, Alaska, and other seismic zones have inherent risk
+        even if recent federal disaster declarations are low (most quakes don't
+        trigger federal aid). Building codes already mandate seismic design.
+        """
+        
+        event_count = earthquake_history.get("count", 0)
+        
+        # HIGH SEISMIC RISK STATES (always apply seismic standards)
+        HIGH_SEISMIC_STATES = ["CA", "AK", "WA", "OR", "NV", "UT", "HI"]
+        
+        # For high seismic states, add context even if low event count
+        if property_state in HIGH_SEISMIC_STATES:
+            if event_count == 0:
+                return {
+                    "type": "earthquake",
+                    "score_penalty": 5,  # Light penalty for inherent risk
+                    "risk_level": "moderate",
+                    "event_count": event_count,
+                    "risks": [
+                        f"ℹ️ {property_state} is in a high seismic risk zone",
+                        "✓ Seismic building codes already mandated by state",
+                        "✓ Standard California construction includes earthquake resistance",
+                        "Note: Low federal disaster count doesn't mean low earthquake risk"
+                    ],
+                    "mitigation_cost_per_unit": 0,  # Already in building codes
+                    "geographic_context": f"{property_state} seismic zone - codes mandate earthquake-resistant construction"
+                }
+            elif event_count >= 2:
+                return {
+                    "type": "earthquake",
+                    "score_penalty": 18,
+                    "risk_level": "high",
+                    "event_count": event_count,
+                    "risks": [
+                        f"{event_count} earthquake declarations since 2004",
+                        "Requires enhanced seismic design standards",
+                        "Foundation reinforcement needed",
+                        "Lateral bracing systems",
+                        "Earthquake insurance required"
+                    ],
+                    "mitigation_cost_per_unit": 15000  # Enhanced seismic retrofitting
+                }
+            else:
+                return {
+                    "type": "earthquake",
+                    "score_penalty": 8,
+                    "risk_level": "moderate",
+                    "event_count": event_count,
+                    "risks": [
+                        f"{event_count} earthquake declaration(s) since 2004",
+                        f"✓ {property_state} building codes mandate seismic design",
+                        "Standard seismic construction practices apply"
+                    ],
+                    "mitigation_cost_per_unit": 0  # Already in building codes
+                }
+        
+        # For non-seismic states
+        if event_count == 0:
+            return {
+                "type": "earthquake",
+                "score_penalty": 0,
+                "risk_level": "minimal",
+                "event_count": 0,
+                "risks": [],
+                "mitigation_cost_per_unit": 0
+            }
+        elif event_count >= 2:
+            return {
+                "type": "earthquake",
+                "score_penalty": 18,
+                "risk_level": "high",
+                "event_count": event_count,
+                "risks": [
+                    f"{event_count} earthquake declarations since 2004",
+                    "Requires seismic design standards",
+                    "Foundation reinforcement needed",
+                    "Lateral bracing systems",
+                    "Earthquake insurance required"
+                ],
+                "mitigation_cost_per_unit": 15000  # Seismic retrofitting
+            }
+        else:
+            return {
+                "type": "earthquake",
+                "score_penalty": 8,
+                "risk_level": "moderate",
+                "event_count": event_count,
+                "risks": [
+                    f"{event_count} earthquake declaration(s) since 2004",
+                    "Consider seismic design standards"
+                ],
+                "mitigation_cost_per_unit": 6000
+            }
+    
+    def _get_disaster_recommendation(self, overall_risk_level: str, high_risk_count: int) -> str:
+        """Get recommendation based on overall disaster risk"""
+        
+        if overall_risk_level == "very_high":
+            return "CAUTION: Multiple high-risk natural hazards present. Conduct detailed feasibility study and cost-benefit analysis before proceeding."
+        elif overall_risk_level == "high":
+            return "High natural disaster risk. Ensure mitigation costs are included in pro forma and verify insurance availability."
+        elif overall_risk_level == "moderate":
+            return "Moderate risk level. Standard mitigation measures should be sufficient."
+        else:
+            return "Low natural disaster risk. Standard construction practices adequate."
     
     def _calculate_overall_score(
         self,
