@@ -31,6 +31,8 @@ services:
       dockerfile: Dockerfile
     ports:
       - '8000:8000'
+    env_file:
+      - ./backend/.env
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/property_intel
       REDIS_URL: redis://redis:6379
@@ -44,20 +46,23 @@ services:
         condition: service_started
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
-  # frontend:
-  #   build:
-  #     context: ./frontend
-  #     dockerfile: Dockerfile
-  #   ports:
-  #     - "3000:3000"
-  #   environment:
-  #     NEXT_PUBLIC_API_URL: http://localhost:8000
-  #   volumes:
-  #     - ./frontend:/app
-  #     - /app/node_modules
-  #   depends_on:
-  #     - backend
-  #   command: npm run dev
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    working_dir: /frontend
+    ports:
+      - '3000:3000'
+    environment:
+      # For client-side (browser) API calls
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      CHOKIDAR_USEPOLLING: 'true'
+    volumes:
+      - ./frontend:/frontend
+      - /frontend/node_modules
+    depends_on:
+      - backend
+    command: npm run dev
 
 volumes:
   postgres_data:

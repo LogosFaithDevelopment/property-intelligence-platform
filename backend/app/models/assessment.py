@@ -52,8 +52,19 @@ class Assessment(BaseModel, UUIDMixin):
     
     # Church Readiness Information
     congregation_approval = Column(Boolean, nullable=True)  # Has congregation voted?
+    congregation_voted = Column(Boolean, nullable=True)  # Alias for congregation_approval
+    vote_percentage = Column(Float, nullable=True)  # Percentage of congregation that voted yes
     leadership_support = Column(String(50), nullable=True)  # unanimous, majority, mixed, etc.
+    denomination_approval_needed = Column(Boolean, nullable=True)  # Needs denomination approval
     timeline_readiness = Column(String(50), nullable=True)  # ready_now, 6_months, 1_year, exploring
+    
+    # Ownership and Property
+    owns_property_free_clear = Column(Boolean, nullable=True)  # Owns property without debt
+    willing_to_ground_lease = Column(Boolean, nullable=True)  # Willing to ground lease the property
+    
+    # Parking Requirements
+    current_parking_spaces = Column(Integer, nullable=True)  # Current number of parking spaces
+    parking_spaces_needed_after = Column(Integer, nullable=True)  # Parking needed after development
     
     # Development Preferences
     preferred_unit_count = Column(Integer, nullable=True)

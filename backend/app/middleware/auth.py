@@ -57,28 +57,16 @@ async def get_current_user(
     token = credentials.credentials
     
     try:
-        # Decode JWT without verification first to inspect claims
-        # In production, you should verify the signature with Clerk's public key
-        unverified = jwt.decode(token, options={"verify_signature": False})
+        # DEVELOPMENT MODE: Skip signature verification
+        # For production, implement proper JWKS verification with Clerk's public keys
+        # See: https://clerk.com/docs/backend-requests/handling/manual-jwt
+        payload = jwt.decode(
+            token, 
+            key="",  # Empty key bypasses verification
+            options={"verify_signature": False}
+        )
         
-        # Verify the JWT (for production, fetch Clerk's JWKS and verify properly)
-        # For now, we'll do basic verification
-        if settings.CLERK_SECRET_KEY:
-            try:
-                # Attempt verification with secret key
-                payload = jwt.decode(
-                    token,
-                    settings.CLERK_SECRET_KEY,
-                    algorithms=["HS256", "RS256"],
-                    options={"verify_signature": True}
-                )
-            except JWTError:
-                # If signature verification fails, fall back to unverified
-                # (only for development)
-                logger.warning("JWT signature verification failed, using unverified token")
-                payload = unverified
-        else:
-            payload = unverified
+        logger.info(f"Token decoded successfully for user: {payload.get('sub')}")
         
         # Extract user information from JWT claims
         user_id = payload.get("sub")

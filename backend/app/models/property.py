@@ -7,8 +7,8 @@ import enum
 
 from app.models.base import BaseModel, SoftDeleteMixin, UUIDMixin
 from geoalchemy2 import Geography
-from sqlalchemy import (Boolean, Column, DateTime, Enum, Float, ForeignKey,
-                        Integer, String, Text)
+from sqlalchemy import (JSON, Boolean, Column, DateTime, Enum, Float,
+                        ForeignKey, Integer, String, Text)
 from sqlalchemy.orm import relationship
 
 
@@ -103,6 +103,7 @@ class Property(BaseModel, UUIDMixin, SoftDeleteMixin):
     # Data Sources and Timestamps
     data_sources = Column(Text, nullable=True)  # JSON of API sources used
     last_data_update = Column(DateTime(timezone=True), nullable=True)
+    manual_overrides = Column(JSON, nullable=True)  # JSON: tracks manual vs API values for admin comparison
     
     # Relationships
     assessments = relationship("Assessment", back_populates="property_obj", cascade="all, delete-orphan")

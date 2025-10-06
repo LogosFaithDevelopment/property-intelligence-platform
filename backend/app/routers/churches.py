@@ -33,7 +33,8 @@ async def create_church(
     current_user: CurrentUser = Depends(get_current_user)
 ):
     """
-    Create a new church/organization (requires authentication)
+    Create a new church/organization
+    Requires authentication to prevent spam and DDOS attacks
     """
     try:
         # Check for duplicate email
@@ -58,7 +59,8 @@ async def create_church(
         # Create new church
         church = Church(**church_data.model_dump(exclude_unset=True))
         church.verification_status = ChurchStatus.PENDING
-        church.user_id = current_user.user_id  # Associate with authenticated user
+        # Associate with authenticated user
+        church.user_id = current_user.user_id
         
         db.add(church)
         await db.commit()

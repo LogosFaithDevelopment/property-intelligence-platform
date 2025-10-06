@@ -189,6 +189,104 @@ async def list_properties(
         )
 
 
+@router.get("/fetch-by-address", response_model=dict)
+async def fetch_property_data_by_address(
+    address: str = Query(..., description="Full street address"),
+    city: Optional[str] = Query(None, description="City name"),
+    state: Optional[str] = Query(None, description="State code (e.g., CA)"),
+    zip_code: Optional[str] = Query(None, description="ZIP code"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Fetch property data from LA County Assessor API by address
+    Used for auto-filling form fields during property creation
+    
+    Returns lot size, zoning, assessed value, etc.
+    
+    Edge Cases:
+    - Non-LA County addresses: Returns success=False with helpful message
+    - Property not found: Returns success=False, user enters manually
+    - API error: Returns success=False, graceful degradation
+    """
+    try:
+        from app.api_clients.la_county_assessor import LACountyAssessorClient
+        
+        logger.info(f"Fetching property data for address: {address}, {city}, {state} {zip_code}")
+        
+        # Check if address is in LA County (only works for LA County)
+        if state and state.upper() not in ["CA", "CALIFORNIA"]:
+            logger.info(f"Address is in {state}, not California. LA County API not applicable.")
+            return {
+                "success": False,
+                "error": "not_la_county",
+                "message": "Property data auto-fill only available for Los Angeles County. Please enter property details manually.",
+                "data": None
+            }
+        
+        # Initialize LA County client
+        la_client = LACountyAssessorClient()
+        
+        try:
+            # Fetch property data
+            result = await la_client.get_property_by_address(
+                street_address=address,
+                city=city,
+                zip_code=zip_code
+            )
+            
+            if not result.get("success"):
+                error_msg = result.get("error", "Property not found")
+                logger.warning(f"LA County API returned no data: {error_msg}")
+                
+                # Determine if it's likely outside LA County or just not found
+                if city and city.lower() not in ["los angeles", "la", "pasadena", "glendale", "burbank", "torrance", "long beach", "santa monica", "pomona", "el monte", "inglewood", "downey", "norwalk", "west covina", "carson", "lancaster", "palmdale", "alhambra", "compton", "hawthorne"]:
+                    return {
+                        "success": False,
+                        "error": "not_la_county",
+                        "message": f"{city} may not be in LA County. Property data auto-fill only works for LA County addresses. Please enter details manually.",
+                        "data": None
+                    }
+                
+                return {
+                    "success": False,
+                    "error": "not_found",
+                    "message": "Property not found in LA County Assessor database. Please enter property details manually.",
+                    "data": None
+                }
+            
+            # Extract and return relevant fields for form auto-fill
+            return {
+                "success": True,
+                "data": {
+                    "lot_size_sqft": result.get("lot_size_sqft"),
+                    "lot_size_acres": result.get("lot_size_acres"),
+                    "assessed_value": result.get("assessed_value"),
+                    "land_value": result.get("land_value"),
+                    "year_built": result.get("year_built"),
+                    "use_type": result.get("use_type"),
+                    "use_code": result.get("use_code"),
+                    "classification": result.get("classification"),
+                    "latitude": result.get("latitude"),
+                    "longitude": result.get("longitude"),
+                    "ain": result.get("ain"),
+                    "data_source": "LA County Assessor",
+                    "query_date": result.get("query_date")
+                }
+            }
+            
+        finally:
+            await la_client.close()
+            
+    except Exception as e:
+        logger.error(f"Error fetching property data by address: {e}", exc_info=True)
+        return {
+            "success": False,
+            "error": "api_error",
+            "message": "Could not fetch property data at this time. Please enter details manually.",
+            "data": None
+        }
+
+
 @router.get("/{property_id}", response_model=PropertyResponse)
 async def get_property(
     property_id: int,
