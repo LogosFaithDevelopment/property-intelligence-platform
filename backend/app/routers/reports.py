@@ -3,18 +3,21 @@ Reports Router
 Handle investment report generation and delivery
 """
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
-from fastapi.responses import StreamingResponse
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
-from typing import Optional
 import io
 import logging
+from datetime import datetime
+from typing import Optional
 
 from app.database import get_db
-from app.models.report import Report, ReportType, ReportFormat, ReportStatus
 from app.models.assessment import Assessment
+from app.models.report import Report, ReportFormat, ReportStatus, ReportType
 from app.schemas.base import SuccessResponse
+from app.services.report_generator import ReportGenerator
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi.responses import Response, StreamingResponse
+from sqlalchemy import and_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -24,9 +27,9 @@ router = APIRouter()
 async def generate_report(
     assessment_id: int,
     report_type: ReportType,
-    report_format: ReportFormat = ReportFormat.PDF,
     background_tasks: BackgroundTasks,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    report_format: ReportFormat = ReportFormat.PDF
 ):
     """
     Generate an investment report for an assessment
@@ -283,3 +286,90 @@ async def generate_report_content(report_id: int):
     # 8. Update report status to completed
     
     logger.info(f"Report content generation completed for report {report_id}")
+
+
+@router.get("/assessment/{assessment_id}/pdf")
+async def generate_pdf_report(
+    assessment_id: int,
+    include_detailed_analysis: bool = True,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Generate and download a PDF report for an assessment
+    
+    Args:
+        assessment_id: ID of the assessment
+        include_detailed_analysis: Include detailed market/financial analysis
+        
+    Returns:
+        PDF file download
+    """
+    try:
+        # Verify assessment exists and is completed
+        stmt = select(Assessment).where(Assessment.id == assessment_id)
+        result = await db.execute(stmt)
+        assessment = result.scalar_one_or_none()
+        
+        if not assessment:
+            raise HTTPException(
+                status_code=404,
+                detail="Assessment not found"
+            )
+        
+        if not assessment.is_completed:
+            raise HTTPException(
+                status_code=400,
+                detail="Assessment must be completed before generating report"
+            )
+        
+        # Generate PDF using synchronous session
+        # (ReportLab requires sync operations)
+        from app.database import SyncSessionLocal
+
+        # Create sync session for ReportLab
+        sync_db = SyncSessionLocal()
+        
+        try:
+            generator = ReportGenerator(sync_db)
+            pdf_bytes = await generator.generate_assessment_report(
+                assessment_id=assessment_id,
+                include_detailed_analysis=include_detailed_analysis
+            )
+        finally:
+            sync_db.close()
+        
+        # Update report record
+        # (Record that a report was generated)
+        report = Report(
+            assessment_id=assessment_id,
+            report_type=ReportType.INVESTMENT,
+            report_format=ReportFormat.PDF,
+            status=ReportStatus.COMPLETED,
+            title=f"Investment Report - Assessment {assessment_id}",
+            file_name=f"assessment_{assessment_id}_report.pdf",
+            file_size_bytes=len(pdf_bytes),
+            generation_completed_at=datetime.utcnow()
+        )
+        db.add(report)
+        await db.commit()
+        
+        # Return PDF as download
+        filename = f"assessment_{assessment_id}_report.pdf"
+        
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}",
+                "Content-Length": str(len(pdf_bytes))
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating PDF report: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate report: {str(e)}"
+        )

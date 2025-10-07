@@ -1,0 +1,202 @@
+'use client';
+
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useUser } from '@clerk/nextjs';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import {
+  Building2,
+  CheckCircle,
+  TrendingUp,
+  Home,
+  DollarSign,
+} from 'lucide-react';
+
+export default function HomePage() {
+  const { isSignedIn, isLoaded } = useUser();
+  const router = useRouter();
+  return (
+    <div className='min-h-screen bg-gradient-to-b from-blue-50 to-white'>
+      {/* Hero Section */}
+      <div className='container mx-auto px-4 py-16'>
+        <nav className='flex justify-between items-center mb-16'>
+          <div className='flex items-center gap-2'>
+            <Building2 className='h-8 w-8 text-blue-600' />
+            <span className='text-2xl font-bold'>Logos Faith Development</span>
+          </div>
+          <div className='flex gap-4'>
+            {isLoaded && (
+              <>
+                {isSignedIn ? (
+                  <Button onClick={() => router.push('/submit-property')}>
+                    Submit Property
+                  </Button>
+                ) : (
+                  <>
+                    <Link href='/sign-in?redirect_url=/submit-property'>
+                      <Button variant='ghost'>Sign In</Button>
+                    </Link>
+                    <Link href='/sign-up?redirect_url=/submit-property'>
+                      <Button>Get Started</Button>
+                    </Link>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        </nav>
+
+        <div className='max-w-4xl mx-auto text-center'>
+          <h1 className='text-5xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent'>
+            Transform Church Land Into Community Housing
+          </h1>
+          <p className='text-xl text-gray-600 mb-8'>
+            Logos Faith Development partners with churches to build affordable
+            housing through modular construction. We provide 100% private
+            funding—your church shares ownership and creates lasting community
+            impact.
+          </p>
+          <div className='flex gap-4 justify-center flex-wrap'>
+            {isLoaded && (
+              <>
+                {isSignedIn ? (
+                  <Button
+                    size='lg'
+                    className='text-lg px-8'
+                    onClick={() => router.push('/submit-property')}
+                  >
+                    Submit Your Property
+                  </Button>
+                ) : (
+                  <Link href='/sign-in?redirect_url=/submit-property'>
+                    <Button size='lg' className='text-lg px-8'>
+                      Sign In to Submit Property
+                    </Button>
+                  </Link>
+                )}
+              </>
+            )}
+            <Link href='/partner-with-us'>
+              <Button size='lg' variant='outline' className='text-lg px-8'>
+                Learn More
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      {/* Benefits Section */}
+      <div className='container mx-auto px-4 py-16'>
+        <h2 className='text-3xl font-bold text-center mb-12'>
+          Why Partner With Logos Faith Development?
+        </h2>
+        <div className='grid md:grid-cols-3 gap-8'>
+          <Card>
+            <CardContent className='pt-6'>
+              <DollarSign className='h-12 w-12 text-blue-600 mb-4' />
+              <h3 className='text-xl font-bold mb-2'>100% Private Funding</h3>
+              <p className='text-gray-600'>
+                We cover all development costs through private investors. Zero
+                financial risk or upfront capital required from your church.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className='pt-6'>
+              <Building2 className='h-12 w-12 text-blue-600 mb-4' />
+              <h3 className='text-xl font-bold mb-2'>Modular Construction</h3>
+              <p className='text-gray-600'>
+                Faster, cost-effective, and sustainable building methods that
+                maximize efficiency and minimize disruption to your church
+                operations.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className='pt-6'>
+              <Home className='h-12 w-12 text-blue-600 mb-4' />
+              <h3 className='text-xl font-bold mb-2'>Double-Bottom-Line</h3>
+              <p className='text-gray-600'>
+                Shared ownership creates long-term revenue for your church while
+                addressing critical housing needs in your community.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {/* How It Works */}
+      <div className='bg-blue-50 py-16'>
+        <div className='container mx-auto px-4'>
+          <h2 className='text-3xl font-bold text-center mb-12'>
+            Our Partnership Process
+          </h2>
+          <div className='max-w-3xl mx-auto space-y-6'>
+            {[
+              {
+                step: 1,
+                title: 'Submit Your Property',
+                description:
+                  'Share your church property details through our streamlined submission platform.',
+              },
+              {
+                step: 2,
+                title: 'Feasibility Analysis',
+                description:
+                  'Our team evaluates zoning, development potential, and financial viability.',
+              },
+              {
+                step: 3,
+                title: 'Partnership Agreement',
+                description:
+                  'We collaborate on development plans and establish shared ownership structure.',
+              },
+              {
+                step: 4,
+                title: 'Build & Create Impact',
+                description:
+                  'We manage modular construction and project delivery. Your church receives ongoing revenue while serving the community.',
+              },
+            ].map((item) => (
+              <div key={item.step} className='flex gap-4 items-start'>
+                <div className='flex-shrink-0 w-12 h-12 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-xl'>
+                  {item.step}
+                </div>
+                <div>
+                  <h3 className='text-xl font-bold mb-1'>{item.title}</h3>
+                  <p className='text-gray-600'>{item.description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* CTA Section */}
+      <div className='container mx-auto px-4 py-16'>
+        <div className='max-w-2xl mx-auto text-center'>
+          <h2 className='text-3xl font-bold mb-4'>Ready to Make an Impact?</h2>
+          <p className='text-xl text-gray-600 mb-8'>
+            Partner with us to transform underutilized church land into
+            affordable housing. Submit your property to begin the conversation.
+          </p>
+          <Link href='/submit-property'>
+            <Button size='lg' className='text-lg px-12'>
+              Submit Property Now
+            </Button>
+          </Link>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <footer className='bg-gray-900 text-white py-8'>
+        <div className='container mx-auto px-4 text-center'>
+          <p>&copy; 2025 Property Intel Inc. All rights reserved.</p>
+        </div>
+      </footer>
+    </div>
+  );
+}

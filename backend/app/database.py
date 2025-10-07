@@ -3,13 +3,15 @@ Database Configuration and Setup
 SQLAlchemy 2.0 with async support and PostGIS for geospatial queries
 """
 
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import MetaData, event
-from sqlalchemy.engine import Engine
 import logging
 
 from app.config import get_settings
+from sqlalchemy import MetaData, create_engine, event, text
+from sqlalchemy.engine import Engine
+from sqlalchemy.ext.asyncio import (AsyncSession, async_sessionmaker,
+                                    create_async_engine)
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -22,12 +24,30 @@ engine = create_async_engine(
     pool_recycle=300,  # Recycle connections every 5 minutes
 )
 
+# Create sync engine for PDF generation (ReportLab requires sync)
+# Convert async URL to sync URL
+sync_database_url = settings.database_url.replace('postgresql+asyncpg', 'postgresql+psycopg2')
+sync_engine = create_engine(
+    sync_database_url,
+    echo=False,  # Don't echo for sync operations
+    pool_pre_ping=True,
+    pool_recycle=300,
+)
+
+# Create sync session factory for PDF generation
+SyncSessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=sync_engine
+)
+
 # Create async session factory
 AsyncSessionLocal = async_sessionmaker(
     engine,
     class_=AsyncSession,
     expire_on_commit=False
 )
+
 
 # Create declarative base with naming convention
 convention = {
@@ -46,11 +66,11 @@ async def create_tables():
     """Create all database tables"""
     async with engine.begin() as conn:
         # Enable PostGIS extension
-        await conn.execute("CREATE EXTENSION IF NOT EXISTS postgis;")
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis;"))
         
         # Import all models to ensure they're registered
-        from app.models import church, property, assessment, report, api_cache
-        
+        from app.models import api_cache, assessment, church, property, report
+
         # Create all tables
         await conn.run_sync(Base.metadata.create_all)
         

@@ -3,22 +3,24 @@ Churches Router
 CRUD operations for church/organization management
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, or_
-from sqlalchemy.orm import selectinload
-from typing import List, Optional
 import logging
+from typing import List, Optional
 
 from app.database import get_db
+from app.middleware.auth import (CurrentUser, get_current_user,
+                                 get_optional_user)
+from app.models.assessment import Assessment
 from app.models.church import Church, ChurchStatus
 from app.models.property import Property
-from app.models.assessment import Assessment
-from app.schemas.church import (
-    ChurchCreate, ChurchUpdate, ChurchResponse, ChurchSummary, 
-    ChurchVerification, ChurchStats
-)
-from app.schemas.base import PaginatedResponse, PaginationParams, SuccessResponse
+from app.schemas.base import (PaginatedResponse, PaginationParams,
+                              SuccessResponse)
+from app.schemas.church import (ChurchCreate, ChurchResponse, ChurchStats,
+                                ChurchSummary, ChurchUpdate,
+                                ChurchVerification)
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import and_, func, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -27,10 +29,12 @@ router = APIRouter()
 @router.post("/", response_model=ChurchResponse, status_code=status.HTTP_201_CREATED)
 async def create_church(
     church_data: ChurchCreate,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user)
 ):
     """
     Create a new church/organization
+    Requires authentication to prevent spam and DDOS attacks
     """
     try:
         # Check for duplicate email
@@ -55,12 +59,14 @@ async def create_church(
         # Create new church
         church = Church(**church_data.model_dump(exclude_unset=True))
         church.verification_status = ChurchStatus.PENDING
+        # Associate with authenticated user
+        church.user_id = current_user.user_id
         
         db.add(church)
         await db.commit()
         await db.refresh(church)
         
-        logger.info(f"Created new church: {church.name} (ID: {church.id})")
+        logger.info(f"Created new church: {church.name} (ID: {church.id}) by user: {current_user.user_id}")
         return church
         
     except HTTPException:
@@ -79,16 +85,30 @@ async def list_churches(
     pagination: PaginationParams = Depends(),
     status_filter: Optional[ChurchStatus] = Query(None, description="Filter by verification status"),
     search: Optional[str] = Query(None, description="Search by name or email"),
-    state: Optional[str] = Query(None, description="Filter by state"),  
-    db: AsyncSession = Depends(get_db)
+    state: Optional[str] = Query(None, description="Filter by state"),
+    my_churches: bool = Query(False, description="Filter to only my churches (requires auth)"),
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[CurrentUser] = Depends(get_optional_user)
 ):
     """
     List churches with filtering and pagination
+    
+    Public endpoint, but authenticated users can filter to their own churches
     """
     try:
         # Build base query
         stmt = select(Church).where(Church.is_active == True)
         count_stmt = select(func.count(Church.id)).where(Church.is_active == True)
+        
+        # Filter by user's churches if requested
+        if my_churches:
+            if not current_user:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Authentication required to view your churches"
+                )
+            stmt = stmt.where(Church.user_id == current_user.user_id)
+            count_stmt = count_stmt.where(Church.user_id == current_user.user_id)
         
         # Apply filters
         if status_filter:
@@ -187,10 +207,11 @@ async def get_church(
 async def update_church(
     church_id: int,
     church_data: ChurchUpdate,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user)
 ):
     """
-    Update church information
+    Update church information (requires authentication and ownership)
     """
     try:
         # Get existing church
@@ -204,6 +225,13 @@ async def update_church(
             raise HTTPException(
                 status_code=404,
                 detail="Church not found"
+            )
+        
+        # Check ownership (users can only update their own churches, unless admin)
+        if church.user_id != current_user.user_id and not current_user.is_admin:
+            raise HTTPException(
+                status_code=403,
+                detail="You don't have permission to update this church"
             )
         
         # Check for email conflicts if email is being updated

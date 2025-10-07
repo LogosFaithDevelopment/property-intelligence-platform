@@ -3,13 +3,12 @@ Free API Providers
 Implementations using free/low-cost APIs for MVP phase
 """
 
-from typing import Dict, Any, Optional
 import logging
+from typing import Any, Dict, Optional
 
-from app.api_providers.base import (
-    PropertyDataProvider, DemographicsProvider, RiskAssessmentProvider, 
-    LocationProvider, APIResponse
-)
+from app.api_providers.base import (APIResponse, DemographicsProvider,
+                                    LocationProvider, PropertyDataProvider,
+                                    RiskAssessmentProvider)
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)

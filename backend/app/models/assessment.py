@@ -3,12 +3,13 @@ Assessment Model
 Represents the evaluation process and results for a property
 """
 
-from sqlalchemy import Column, String, Integer, Float, Text, Boolean, DateTime, ForeignKey, Enum, JSON
-from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
 import enum
 
 from app.models.base import BaseModel, UUIDMixin
+from sqlalchemy import (JSON, Boolean, Column, DateTime, Enum, Float,
+                        ForeignKey, Integer, String, Text)
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 
 
 class AssessmentStatus(str, enum.Enum):
@@ -40,7 +41,10 @@ class Assessment(BaseModel, UUIDMixin):
     property_id = Column(Integer, ForeignKey("properties.id"), nullable=False)
     
     church = relationship("Church", back_populates="assessments")
-    property = relationship("Property", back_populates="assessments")
+    property_obj = relationship("Property", back_populates="assessments")
+    
+    # User Tracking (for authentication)
+    user_id = Column(String(255), nullable=True, index=True)  # Clerk user ID
     
     # Assessment Metadata
     status = Column(Enum(AssessmentStatus), default=AssessmentStatus.DRAFT, nullable=False)
@@ -48,13 +52,29 @@ class Assessment(BaseModel, UUIDMixin):
     
     # Church Readiness Information
     congregation_approval = Column(Boolean, nullable=True)  # Has congregation voted?
+    congregation_voted = Column(Boolean, nullable=True)  # Alias for congregation_approval
+    vote_percentage = Column(Float, nullable=True)  # Percentage of congregation that voted yes
     leadership_support = Column(String(50), nullable=True)  # unanimous, majority, mixed, etc.
+    denomination_approval_needed = Column(Boolean, nullable=True)  # Needs denomination approval
     timeline_readiness = Column(String(50), nullable=True)  # ready_now, 6_months, 1_year, exploring
+    
+    # Ownership and Property
+    owns_property_free_clear = Column(Boolean, nullable=True)  # Owns property without debt
+    willing_to_ground_lease = Column(Boolean, nullable=True)  # Willing to ground lease the property
+    
+    # Parking Requirements
+    current_parking_spaces = Column(Integer, nullable=True)  # Current number of parking spaces
+    parking_spaces_needed_after = Column(Integer, nullable=True)  # Parking needed after development
     
     # Development Preferences
     preferred_unit_count = Column(Integer, nullable=True)
     preferred_unit_types = Column(Text, nullable=True)  # JSON: ["studio", "1br", "2br"]
     affordability_target = Column(String(50), nullable=True)  # "30_ami", "60_ami", "80_ami"
+    
+    # Available Space for Development (Client-Provided)
+    available_build_sqft = Column(Float, nullable=True)  # Square footage available for housing development
+    available_build_acres = Column(Float, nullable=True)  # Acres available for housing (auto-calculated from sqft)
+    build_area_notes = Column(Text, nullable=True)  # Additional context about available space (e.g., "Southeast corner of parking lot")
     
     # Partnership Terms
     revenue_sharing_preference = Column(String(50), nullable=True)

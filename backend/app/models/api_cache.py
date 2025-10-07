@@ -3,12 +3,13 @@ API Cache Model
 Cache responses from external APIs to reduce costs and improve performance
 """
 
-from sqlalchemy import Column, String, Integer, Text, DateTime, Float, Boolean, Index
-from sqlalchemy.sql import func
 import hashlib
 import json
 
 from app.models.base import BaseModel
+from sqlalchemy import (Boolean, Column, DateTime, Float, Index, Integer,
+                        String, Text)
+from sqlalchemy.sql import func
 
 
 class APICache(BaseModel):
