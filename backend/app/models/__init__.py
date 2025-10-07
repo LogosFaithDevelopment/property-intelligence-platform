@@ -3,6 +3,7 @@ Models package initialization
 Import all models to ensure they're registered with SQLAlchemy
 """
 
+from app.models.admin_user import AdminRole, AdminUser
 from app.models.api_cache import APICache
 from app.models.assessment import (Assessment, AssessmentPriority,
                                    AssessmentStatus)
@@ -24,6 +25,7 @@ __all__ = [
     "Assessment",
     "Report",
     "APICache",
+    "AdminUser",
     
     # Enums
     "ChurchStatus",
@@ -34,4 +36,5 @@ __all__ = [
     "ReportType",
     "ReportFormat",
     "ReportStatus",
+    "AdminRole",
 ]
