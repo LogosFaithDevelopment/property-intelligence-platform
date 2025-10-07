@@ -3,7 +3,7 @@ Routers package initialization
 Import all routers for FastAPI application
 """
 
-from app.routers import auth, churches, properties, assessments, reports
+from app.routers import assessments, auth, churches, properties, reports
 
 __all__ = [
     "auth",

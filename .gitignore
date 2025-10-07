@@ -6,6 +6,23 @@ __pycache__/
 # C extensions
 *.so
 
+# PDF Reports (generated files)
+*.pdf
+reports/
+backend/reports/
+
+# Test result files
+*.json
+backend/*.json
+
+# API Keys and sensitive data
+CLERK_KEYS.md
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
 # Distribution / packaging
 .Python
 build/

@@ -3,11 +3,12 @@ Report Model
 Generated investment reports and documents
 """
 
-from sqlalchemy import Column, String, Integer, Float, Text, Boolean, DateTime, ForeignKey, Enum, LargeBinary
-from sqlalchemy.orm import relationship
 import enum
 
 from app.models.base import BaseModel, UUIDMixin
+from sqlalchemy import (Boolean, Column, DateTime, Enum, Float, ForeignKey,
+                        Integer, LargeBinary, String, Text)
+from sqlalchemy.orm import relationship
 
 
 class ReportType(str, enum.Enum):

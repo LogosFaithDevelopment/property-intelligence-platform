@@ -3,12 +3,13 @@ Property Model
 Represents physical properties owned by churches
 """
 
-from sqlalchemy import Column, String, Integer, Float, Text, Boolean, DateTime, ForeignKey, Enum
-from sqlalchemy.orm import relationship
-from geoalchemy2 import Geography
 import enum
 
-from app.models.base import BaseModel, UUIDMixin, SoftDeleteMixin
+from app.models.base import BaseModel, SoftDeleteMixin, UUIDMixin
+from geoalchemy2 import Geography
+from sqlalchemy import (JSON, Boolean, Column, DateTime, Enum, Float,
+                        ForeignKey, Integer, String, Text)
+from sqlalchemy.orm import relationship
 
 
 class PropertyType(str, enum.Enum):
@@ -44,8 +45,11 @@ class Property(BaseModel, UUIDMixin, SoftDeleteMixin):
     church_id = Column(Integer, ForeignKey("churches.id"), nullable=False)
     church = relationship("Church", back_populates="properties")
     
+    # User Tracking (for authentication)
+    user_id = Column(String(255), nullable=True, index=True)  # Clerk user ID
+    
     # Basic Property Information
-    name = Column(String(255), nullable=True)  # Property name/identifier
+    name = Column(String(255), nullable=True)  # Property name/identifierica
     property_type = Column(Enum(PropertyType), nullable=False)
     
     # Address Information
@@ -99,9 +103,10 @@ class Property(BaseModel, UUIDMixin, SoftDeleteMixin):
     # Data Sources and Timestamps
     data_sources = Column(Text, nullable=True)  # JSON of API sources used
     last_data_update = Column(DateTime(timezone=True), nullable=True)
+    manual_overrides = Column(JSON, nullable=True)  # JSON: tracks manual vs API values for admin comparison
     
     # Relationships
-    assessments = relationship("Assessment", back_populates="property", cascade="all, delete-orphan")
+    assessments = relationship("Assessment", back_populates="property_obj", cascade="all, delete-orphan")
     
     def __repr__(self):
         return f"<Property(id={self.id}, address='{self.street_address}', type='{self.property_type}')>"

@@ -3,12 +3,13 @@ Church/Organization Model
 Represents faith-based organizations and their details
 """
 
-from sqlalchemy import Column, String, Integer, Text, Boolean, Float, DateTime, Enum
-from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
 import enum
 
-from app.models.base import BaseModel, UUIDMixin, SoftDeleteMixin
+from app.models.base import BaseModel, SoftDeleteMixin, UUIDMixin
+from sqlalchemy import (Boolean, Column, DateTime, Enum, Float, Integer,
+                        String, Text)
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 
 
 class ChurchStatus(str, enum.Enum):
@@ -23,6 +24,9 @@ class Church(BaseModel, UUIDMixin, SoftDeleteMixin):
     """Church/Organization model"""
     
     __tablename__ = "churches"
+    
+    # User Tracking (for authentication)
+    user_id = Column(String(255), nullable=True, index=True)  # Clerk user ID
     
     # Basic Information
     name = Column(String(255), nullable=False, index=True)

@@ -5,6 +5,7 @@
 Your **Property Intelligence Platform** backend is fully configured and ready to run!
 
 ### **Environment Status:**
+
 - ✅ Virtual environment (venv) active
 - ✅ All dependencies installed (FastAPI, SQLAlchemy, etc.)
 - ✅ Configuration file (.env) created
@@ -13,6 +14,7 @@ Your **Property Intelligence Platform** backend is fully configured and ready to
 - ✅ API provider layer ready (free & professional)
 
 ### **Current Configuration:**
+
 - **Environment:** Development
 - **Python:** 3.10
 - **Framework:** FastAPI with async support
@@ -45,6 +47,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ### **Step 3: Access the API**
 
 Once running, open your browser to:
+
 - **Interactive API Docs:** http://localhost:8000/docs
 - **Alternative Docs:** http://localhost:8000/redoc
 - **Health Check:** http://localhost:8000/health
@@ -54,11 +57,13 @@ Once running, open your browser to:
 ## 📋 API Endpoints Available
 
 ### **Authentication** (`/api/v1/auth`)
+
 - POST `/webhooks/clerk` - Clerk webhook handler
 - GET `/verify-token` - Token verification
 - GET `/user-info` - User information
 
 ### **Churches** (`/api/v1/churches`)
+
 - POST `/` - Create church
 - GET `/` - List churches (with filtering)
 - GET `/{church_id}` - Get church details
@@ -68,6 +73,7 @@ Once running, open your browser to:
 - GET `/stats/overview` - Church statistics
 
 ### **Properties** (`/api/v1/properties`)
+
 - POST `/` - Create property
 - GET `/` - List properties (with filtering)
 - GET `/{property_id}` - Get property details
@@ -77,12 +83,14 @@ Once running, open your browser to:
 - GET `/stats/analytics` - Property analytics
 
 ### **Assessments** (`/api/v1/assessments`)
+
 - POST `/` - Create assessment
 - GET `/` - List assessments
 - GET `/{assessment_id}` - Get assessment
 - POST `/{assessment_id}/process` - Start AI processing
 
 ### **Reports** (`/api/v1/reports`)
+
 - POST `/generate/{assessment_id}` - Generate report
 - GET `/{report_id}` - Get report info
 - GET `/{report_id}/download` - Download report
@@ -93,6 +101,7 @@ Once running, open your browser to:
 ## 🔧 Configuration & API Keys
 
 ### **Required for Basic Testing:**
+
 ```env
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/property_intel
 REDIS_URL=redis://localhost:6379
@@ -101,6 +110,7 @@ OPENAI_API_KEY=sk-your-key-here  # For AI report generation
 ```
 
 ### **Optional Professional APIs:**
+
 ```env
 ATTOM_API_KEY=  # Property data (30-day free trial available)
 GOOGLE_MAPS_API_KEY=  # Location services ($200 free credit)
@@ -109,6 +119,7 @@ CLERK_SECRET_KEY=  # Authentication (free tier available)
 ```
 
 **If professional API keys are empty, the system automatically uses free alternatives:**
+
 - OpenStreetMap for geocoding
 - US Census for demographics
 - FEMA for flood risk
@@ -119,11 +130,13 @@ CLERK_SECRET_KEY=  # Authentication (free tier available)
 ## 🧪 Testing the API
 
 ### **Test 1: Health Check**
+
 ```bash
 curl http://localhost:8000/health
 ```
 
 Expected response:
+
 ```json
 {
   "status": "healthy",
@@ -134,6 +147,7 @@ Expected response:
 ```
 
 ### **Test 2: Create a Church**
+
 ```bash
 curl -X POST "http://localhost:8000/api/v1/churches/" \
   -H "Content-Type: application/json" \
@@ -146,6 +160,7 @@ curl -X POST "http://localhost:8000/api/v1/churches/" \
 ```
 
 ### **Test 3: List Churches**
+
 ```bash
 curl "http://localhost:8000/api/v1/churches/?page=1&size=10"
 ```
@@ -162,6 +177,7 @@ The application will automatically create all database tables on startup. You'll
 ```
 
 **Tables created:**
+
 - `churches` - Church organizations
 - `properties` - Property listings
 - `assessments` - AI evaluations
@@ -173,6 +189,7 @@ The application will automatically create all database tables on startup. You'll
 ## 🐛 Troubleshooting
 
 ### **Issue: Database connection error**
+
 ```bash
 # Make sure PostgreSQL is running
 docker-compose up -d postgres
@@ -182,12 +199,14 @@ docker-compose ps
 ```
 
 ### **Issue: Redis connection error**
+
 ```bash
 # Make sure Redis is running
 docker-compose up -d redis
 ```
 
 ### **Issue: Import errors**
+
 ```bash
 # Make sure virtual environment is activated
 source venv/bin/activate
@@ -197,6 +216,7 @@ pip install -r requirements.txt
 ```
 
 ### **Issue: Port 8000 already in use**
+
 ```bash
 # Use a different port
 uvicorn app.main:app --reload --port 8001
@@ -210,20 +230,24 @@ lsof -ti:8000 | xargs kill -9
 ## 🎯 Next Steps
 
 ### **1. Test API Locally**
+
 - Start the server and test endpoints with curl or Postman
 - Use the interactive docs at `/docs` to explore
 
 ### **2. Add API Keys**
+
 - Sign up for free trials:
   - **ATTOM Data:** 30 days free, 500 calls/day
   - **OpenAI:** $5 free credit for new accounts
   - **Clerk:** Free tier for authentication
 
 ### **3. Build the Frontend**
+
 - Next.js app will connect to this backend
 - All API endpoints are ready for integration
 
 ### **4. Deploy to Production**
+
 - Use Railway.app or Render for backend
 - Configure production environment variables
 - Enable proper authentication
@@ -233,6 +257,7 @@ lsof -ti:8000 | xargs kill -9
 ## 💰 Cost Breakdown
 
 ### **Development (Current Setup):**
+
 - **Total:** $0-50/month
   - Database: Free (local Docker)
   - Redis: Free (local Docker)
@@ -240,6 +265,7 @@ lsof -ti:8000 | xargs kill -9
   - OpenAI: ~$50/month for testing
 
 ### **Production (Professional Tier):**
+
 - **Total:** ~$3,000/month
   - ATTOM Data: $1,500/month
   - Google Maps: $200/month
@@ -264,6 +290,7 @@ lsof -ti:8000 | xargs kill -9
 ## ✅ What You've Built
 
 A **production-ready, enterprise-grade backend** that can:
+
 - Handle 5,000+ property evaluations per month
 - Generate investment-grade reports in 2-5 minutes
 - Scale horizontally without code changes

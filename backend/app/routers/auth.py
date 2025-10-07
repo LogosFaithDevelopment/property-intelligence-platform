@@ -3,21 +3,21 @@ Authentication Router
 Handles Clerk webhook integration and user session management
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from typing import Optional
-import httpx
-import json
-import hmac
 import hashlib
+import hmac
+import json
 import logging
+from typing import Optional
 
-from app.database import get_db
+import httpx
 from app.config import get_settings
+from app.database import get_db
 from app.models.church import Church
-from app.schemas.base import SuccessResponse, ErrorResponse
+from app.schemas.base import ErrorResponse, SuccessResponse
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 settings = get_settings()

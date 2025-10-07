@@ -3,17 +3,22 @@ Assessments Router
 Handle property assessment workflow and AI scoring
 """
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func
-from typing import List, Optional
 import logging
+from typing import List, Optional
 
 from app.database import get_db
-from app.models.assessment import Assessment, AssessmentStatus, AssessmentPriority
-from app.models.property import Property
+from app.middleware.auth import (CurrentUser, get_current_user,
+                                 get_optional_user)
+from app.models.assessment import (Assessment, AssessmentPriority,
+                                   AssessmentStatus)
 from app.models.church import Church
-from app.schemas.base import SuccessResponse, PaginatedResponse, PaginationParams
+from app.models.property import Property
+from app.schemas.base import (PaginatedResponse, PaginationParams,
+                              SuccessResponse)
+from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException, Query,
+                     status)
+from sqlalchemy import and_, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -29,14 +34,75 @@ class AssessmentResponse:
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_assessment(
-    background_tasks: BackgroundTasks,
-    db: AsyncSession = Depends(get_db)
+    assessment_data: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user)
 ):
     """
-    Create a new property assessment and start AI processing
+    Create a new property assessment (requires authentication)
     """
-    # TODO: Implement with proper schemas
-    return {"message": "Assessment creation endpoint - to be implemented"}
+    try:
+        # Verify church and property exist
+        church_stmt = select(Church).where(Church.id == assessment_data.get("church_id"))
+        church_result = await db.execute(church_stmt)
+        church = church_result.scalar_one_or_none()
+        
+        if not church:
+            raise HTTPException(status_code=404, detail="Church not found")
+        
+        # Verify user owns the church (or is admin)
+        if church.user_id != current_user.user_id and not current_user.is_admin:
+            raise HTTPException(
+                status_code=403,
+                detail="You don't have permission to create assessments for this church"
+            )
+        
+        property_stmt = select(Property).where(Property.id == assessment_data.get("property_id"))
+        property_result = await db.execute(property_stmt)
+        property_obj = property_result.scalar_one_or_none()
+        
+        if not property_obj:
+            raise HTTPException(status_code=404, detail="Property not found")
+        
+        # Create assessment
+        assessment = Assessment(
+            church_id=assessment_data.get("church_id"),
+            property_id=assessment_data.get("property_id"),
+            user_id=current_user.user_id,  # Track ownership
+            status=AssessmentStatus.DRAFT,
+            priority=AssessmentPriority[assessment_data.get("priority", "MEDIUM").upper()],
+            congregation_approval=assessment_data.get("congregation_approval"),
+            leadership_support=assessment_data.get("leadership_support"),
+            timeline_readiness=assessment_data.get("timeline_readiness"),
+            preferred_unit_count=assessment_data.get("preferred_unit_count"),
+            affordability_target=assessment_data.get("affordability_target"),
+            revenue_sharing_preference=assessment_data.get("revenue_sharing_preference"),
+            development_involvement_level=assessment_data.get("development_involvement_level"),
+            special_requirements=assessment_data.get("special_requirements")
+        )
+        
+        db.add(assessment)
+        await db.commit()
+        await db.refresh(assessment)
+        
+        logger.info(f"Created assessment {assessment.id} for property {property_obj.id} by user {current_user.user_id}")
+        
+        return {
+            "id": assessment.id,
+            "uuid": str(assessment.uuid),
+            "church_id": assessment.church_id,
+            "property_id": assessment.property_id,
+            "status": assessment.status.value,
+            "priority": assessment.priority.value,
+            "created_at": assessment.created_at.isoformat() if assessment.created_at else None
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating assessment: {e}", exc_info=True)
+        await db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to create assessment")
 
 
 @router.get("/")
@@ -78,13 +144,18 @@ async def update_assessment(
 @router.post("/{assessment_id}/process")
 async def process_assessment(
     assessment_id: int,
-    background_tasks: BackgroundTasks,
+    use_premium_model: bool = Query(False, description="Use GPT-4 instead of GPT-3.5"),
     db: AsyncSession = Depends(get_db)
 ):
     """
     Trigger AI processing for an assessment
+    
+    Uses OpenAI to analyze property and generate assessment scores
     """
     try:
+        # Import service
+        from app.services.ai_assessment import AIAssessmentService
+
         # Verify assessment exists
         stmt = select(Assessment).where(Assessment.id == assessment_id)
         result = await db.execute(stmt)
@@ -96,14 +167,17 @@ async def process_assessment(
                 detail="Assessment not found"
             )
         
-        # Start processing
-        assessment.start_processing()
-        await db.commit()
+        # Run AI assessment service
+        ai_service = AIAssessmentService(db)
+        assessment_results = await ai_service.process_assessment(
+            assessment_id=assessment_id,
+            use_premium_model=use_premium_model
+        )
         
-        # Schedule background AI processing
-        background_tasks.add_task(process_assessment_ai, assessment_id)
-        
-        return SuccessResponse(message="Assessment processing started")
+        return SuccessResponse(
+            message="Assessment processing completed",
+            data=assessment_results
+        )
         
     except HTTPException:
         raise

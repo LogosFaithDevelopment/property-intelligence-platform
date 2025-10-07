@@ -3,11 +3,12 @@ Application Configuration
 Using Pydantic Settings for environment-based configuration
 """
 
-from pydantic_settings import BaseSettings
-from pydantic import Field, validator
-from typing import List, Optional
-from functools import lru_cache
 import os
+from functools import lru_cache
+from typing import List, Optional
+
+from pydantic import Field, validator
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -31,10 +32,11 @@ class Settings(BaseSettings):
     
     # AI/ML APIs
     openai_api_key: str = Field(..., alias="OPENAI_API_KEY")
-    openai_model: str = Field(default="gpt-3.5-turbo", alias="OPENAI_MODEL")
+    openai_model: str = Field(default="gpt-4o-mini", alias="OPENAI_MODEL")
     
     # Free Tier APIs
     census_api_key: Optional[str] = Field(None, alias="CENSUS_API_KEY")
+    hud_api_key: Optional[str] = Field(None, alias="HUD_API_KEY")
     
     # Professional Tier APIs (activated later)
     attom_api_key: Optional[str] = Field(None, alias="ATTOM_API_KEY")

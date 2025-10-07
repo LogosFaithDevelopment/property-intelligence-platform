@@ -3,20 +3,23 @@ Properties Router
 CRUD operations for property management and data enrichment
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, or_
-from typing import List, Optional
 import logging
+from typing import List, Optional
 
 from app.database import get_db
-from app.models.property import Property, PropertyType, ZoningType
+from app.middleware.auth import (CurrentUser, get_current_user,
+                                 get_optional_user)
 from app.models.church import Church
-from app.schemas.property import (
-    PropertyCreate, PropertyUpdate, PropertyResponse, PropertySummary,
-    PropertyEnrichment, PropertyAnalytics
-)
-from app.schemas.base import PaginatedResponse, PaginationParams, SuccessResponse
+from app.models.property import Property, PropertyType, ZoningType
+from app.schemas.base import (PaginatedResponse, PaginationParams,
+                              SuccessResponse)
+from app.schemas.property import (PropertyAnalytics, PropertyCreate,
+                                  PropertyEnrichment, PropertyResponse,
+                                  PropertySummary, PropertyUpdate)
+from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException, Query,
+                     status)
+from sqlalchemy import and_, func, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -26,10 +29,11 @@ router = APIRouter()
 async def create_property(
     property_data: PropertyCreate,
     background_tasks: BackgroundTasks,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user)
 ):
     """
-    Create a new property and trigger data enrichment
+    Create a new property and trigger data enrichment (requires authentication)
     """
     try:
         # Verify church exists and is active
@@ -43,6 +47,13 @@ async def create_property(
             raise HTTPException(
                 status_code=404,
                 detail="Church not found"
+            )
+        
+        # Verify user owns the church (or is admin)
+        if church.user_id != current_user.user_id and not current_user.is_admin:
+            raise HTTPException(
+                status_code=403,
+                detail="You don't have permission to add properties to this church"
             )
         
         # Check for duplicate address for this church
@@ -63,6 +74,7 @@ async def create_property(
         # Create property
         property_dict = property_data.model_dump(exclude_unset=True)
         property_obj = Property(**property_dict)
+        property_obj.user_id = current_user.user_id  # Track ownership
         
         # Auto-calculate acres if not provided
         if property_obj.lot_size_sqft and not property_obj.lot_size_acres:
@@ -75,7 +87,7 @@ async def create_property(
         # Schedule background data enrichment
         background_tasks.add_task(enrich_property_data, property_obj.id)
         
-        logger.info(f"Created property: {property_obj.full_address} (ID: {property_obj.id})")
+        logger.info(f"Created property: {property_obj.full_address} (ID: {property_obj.id}) by user: {current_user.user_id}")
         return property_obj
         
     except HTTPException:
@@ -177,6 +189,104 @@ async def list_properties(
         )
 
 
+@router.get("/fetch-by-address", response_model=dict)
+async def fetch_property_data_by_address(
+    address: str = Query(..., description="Full street address"),
+    city: Optional[str] = Query(None, description="City name"),
+    state: Optional[str] = Query(None, description="State code (e.g., CA)"),
+    zip_code: Optional[str] = Query(None, description="ZIP code"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Fetch property data from LA County Assessor API by address
+    Used for auto-filling form fields during property creation
+    
+    Returns lot size, zoning, assessed value, etc.
+    
+    Edge Cases:
+    - Non-LA County addresses: Returns success=False with helpful message
+    - Property not found: Returns success=False, user enters manually
+    - API error: Returns success=False, graceful degradation
+    """
+    try:
+        from app.api_clients.la_county_assessor import LACountyAssessorClient
+        
+        logger.info(f"Fetching property data for address: {address}, {city}, {state} {zip_code}")
+        
+        # Check if address is in LA County (only works for LA County)
+        if state and state.upper() not in ["CA", "CALIFORNIA"]:
+            logger.info(f"Address is in {state}, not California. LA County API not applicable.")
+            return {
+                "success": False,
+                "error": "not_la_county",
+                "message": "Property data auto-fill only available for Los Angeles County. Please enter property details manually.",
+                "data": None
+            }
+        
+        # Initialize LA County client
+        la_client = LACountyAssessorClient()
+        
+        try:
+            # Fetch property data
+            result = await la_client.get_property_by_address(
+                street_address=address,
+                city=city,
+                zip_code=zip_code
+            )
+            
+            if not result.get("success"):
+                error_msg = result.get("error", "Property not found")
+                logger.warning(f"LA County API returned no data: {error_msg}")
+                
+                # Determine if it's likely outside LA County or just not found
+                if city and city.lower() not in ["los angeles", "la", "pasadena", "glendale", "burbank", "torrance", "long beach", "santa monica", "pomona", "el monte", "inglewood", "downey", "norwalk", "west covina", "carson", "lancaster", "palmdale", "alhambra", "compton", "hawthorne"]:
+                    return {
+                        "success": False,
+                        "error": "not_la_county",
+                        "message": f"{city} may not be in LA County. Property data auto-fill only works for LA County addresses. Please enter details manually.",
+                        "data": None
+                    }
+                
+                return {
+                    "success": False,
+                    "error": "not_found",
+                    "message": "Property not found in LA County Assessor database. Please enter property details manually.",
+                    "data": None
+                }
+            
+            # Extract and return relevant fields for form auto-fill
+            return {
+                "success": True,
+                "data": {
+                    "lot_size_sqft": result.get("lot_size_sqft"),
+                    "lot_size_acres": result.get("lot_size_acres"),
+                    "assessed_value": result.get("assessed_value"),
+                    "land_value": result.get("land_value"),
+                    "year_built": result.get("year_built"),
+                    "use_type": result.get("use_type"),
+                    "use_code": result.get("use_code"),
+                    "classification": result.get("classification"),
+                    "latitude": result.get("latitude"),
+                    "longitude": result.get("longitude"),
+                    "ain": result.get("ain"),
+                    "data_source": "LA County Assessor",
+                    "query_date": result.get("query_date")
+                }
+            }
+            
+        finally:
+            await la_client.close()
+            
+    except Exception as e:
+        logger.error(f"Error fetching property data by address: {e}", exc_info=True)
+        return {
+            "success": False,
+            "error": "api_error",
+            "message": "Could not fetch property data at this time. Please enter details manually.",
+            "data": None
+        }
+
+
 @router.get("/{property_id}", response_model=PropertyResponse)
 async def get_property(
     property_id: int,
@@ -271,14 +381,19 @@ async def update_property(
 @router.post("/{property_id}/enrich", response_model=SuccessResponse)
 async def enrich_property(
     property_id: int,
-    background_tasks: BackgroundTasks,
     force_refresh: bool = Query(False, description="Force refresh cached data"),
+    use_premium_apis: bool = Query(False, description="Use premium APIs (Google, ATTOM)"),
     db: AsyncSession = Depends(get_db)
 ):
     """
     Trigger property data enrichment from external APIs
+    
+    Fetches additional data from Census, FEMA, HUD, and optionally Google Maps/ATTOM Data
     """
     try:
+        # Import service
+        from app.services.property_enrichment import PropertyEnrichmentService
+
         # Verify property exists
         stmt = select(Property).where(
             and_(Property.id == property_id, Property.is_active == True)
@@ -292,10 +407,18 @@ async def enrich_property(
                 detail="Property not found"
             )
         
-        # Schedule enrichment task
-        background_tasks.add_task(enrich_property_data, property_id, force_refresh)
+        # Run enrichment service
+        enrichment_service = PropertyEnrichmentService(db)
+        enrichment_results = await enrichment_service.enrich_property(
+            property_id=property_id,
+            use_premium_apis=use_premium_apis,
+            force_refresh=force_refresh
+        )
         
-        return SuccessResponse(message="Property enrichment started")
+        return SuccessResponse(
+            message="Property enrichment completed",
+            data=enrichment_results
+        )
         
     except HTTPException:
         raise

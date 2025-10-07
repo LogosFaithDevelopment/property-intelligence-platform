@@ -3,12 +3,13 @@ Property Pydantic Schemas
 Request/response schemas for property-related endpoints
 """
 
-from pydantic import Field, validator
-from typing import Optional, List, Tuple
 from datetime import datetime
+from typing import List, Optional, Tuple
 
-from app.schemas.base import BaseSchema, TimestampMixin, UUIDMixin, LocationSchema, AddressSchema
 from app.models.property import PropertyType, ZoningType
+from app.schemas.base import (AddressSchema, BaseSchema, LocationSchema,
+                              TimestampMixin, UUIDMixin)
+from pydantic import Field, validator
 
 
 class PropertyBase(BaseSchema):
