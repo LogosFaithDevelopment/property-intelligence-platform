@@ -82,6 +82,36 @@ interface SubmissionDetail {
   property_building_sqft: number | null;
   property_year_built: number | null;
 
+  // Section 3: Ownership & Financial
+  owns_property_free_clear: boolean | null;
+  has_mortgage: boolean | null;
+  mortgage_balance: number | null;
+  willing_to_ground_lease: boolean | null;
+  assessed_value: number | null;
+  existing_debt_amount: number | null;
+  expects_sanctuary_replacement: boolean | null;
+  sanctuary_replacement_cost_estimate: number | null;
+
+  // Section 4: Congregation Approval
+  congregation_voted: boolean | null;
+  vote_percentage: number | null;
+  leadership_support: string | null;
+  decision_authority: string | null;
+  decision_timeline: string | null;
+  denomination_approval_needed: boolean | null;
+
+  // Section 5: Parking & Development
+  current_parking_spaces: number | null;
+  parking_spaces_needed_after: number | null;
+  special_requirements: string | null;
+
+  // Section 6: Timeline & Preferences
+  timeline_preference: string | null;
+  preferred_unit_count: number | null;
+  affordability_target: string | null;
+  revenue_sharing_preference: string | null;
+  development_involvement_level: string | null;
+
   // Assessment data (enriched)
   financial_projections: any | null;
   market_analysis: any | null;
@@ -613,457 +643,523 @@ export default function AdminSubmissionDetailPage({
         </CardContent>
       </Card>
 
-      {/* Property Information - ENHANCED */}
-      <Card className='mb-6'>
-        <CardHeader>
-          <CardTitle className='flex items-center gap-2'>
-            <MapPin className='h-5 w-5' />
-            Property Information
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {/* Address Header */}
-          <div className='mb-6'>
-            {submission.property_street_address && (
-              <h4 className='font-semibold text-xl mb-1'>
-                {submission.property_street_address}
-              </h4>
-            )}
-            {(submission.property_city ||
-              submission.property_state ||
-              submission.property_zip_code) && (
-              <p className='text-gray-600'>
-                {[
-                  submission.property_city,
-                  submission.property_state,
-                  submission.property_zip_code,
-                ]
-                  .filter(Boolean)
-                  .join(', ')}
-              </p>
-            )}
-          </div>
-
-          {/* Combined Lot Size Banner (if multi-address) */}
-          {getSmartyData()?.property?.combined_lot_size_sqft && (
-            <div className='mb-6 p-5 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-300 rounded-lg shadow-sm'>
-              <div className='flex items-center justify-between'>
-                <div>
-                  <label className='text-xs font-bold text-blue-700 uppercase tracking-wide flex items-center gap-1'>
-                    <Building2 className='h-4 w-4' />
-                    Total Development Site
-                  </label>
-                  <p className='text-3xl font-bold text-blue-900 mt-2'>
-                    {getSmartyData()?.property?.combined_lot_size_sqft.toLocaleString()}{' '}
-                    <span className='text-lg font-normal text-blue-700'>
-                      sq ft
-                    </span>
-                  </p>
-                  <p className='text-sm text-blue-700 mt-1 font-medium'>
-                    {1 +
-                      (getSmartyData()?.property?.additional_addresses
-                        ?.length || 0)}{' '}
-                    {getSmartyData()?.property?.additional_addresses?.length
-                      ? 'parcels combined'
-                      : 'parcel'}
-                  </p>
-                </div>
-                {getSmartyData()?.property?.demolish_all_structures && (
-                  <Badge className='bg-amber-500 hover:bg-amber-600 text-white px-3 py-1'>
-                    🏗️ Full Demolition Planned
-                  </Badge>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Additional Addresses */}
-          {getSmartyData()?.property?.additional_addresses &&
-            getSmartyData()?.property?.additional_addresses.length > 0 && (
-              <div className='mb-6 p-4 bg-gray-50 border-l-4 border-gray-400 rounded'>
-                <label className='text-sm font-bold text-gray-700 uppercase block mb-3'>
-                  📍 Additional Parcels
-                </label>
-                <div className='space-y-2'>
-                  {getSmartyData()?.property?.additional_addresses.map(
-                    (addr: any, idx: number) => (
-                      <div
-                        key={idx}
-                        className='flex items-center gap-2 text-sm bg-white p-2 rounded'
-                      >
-                        <MapPin className='h-4 w-4 text-gray-500 flex-shrink-0' />
-                        <span className='font-medium'>
-                          {addr.address}, {addr.city}, {addr.state}{' '}
-                          {addr.zip_code}
-                        </span>
-                      </div>
-                    )
-                  )}
-                </div>
-              </div>
-            )}
-
-          {/* Property Details Grid - Only Show If Data Exists */}
-          {(() => {
-            const smartyData = getSmartyData();
-            const lotInfo = smartyData?.lot;
-            const buildingInfo = smartyData?.building;
-            const valuationInfo = smartyData?.valuation;
-
-            // Determine what data to show (prefer enriched Smarty data)
-            const lotSizeSqft =
-              lotInfo?.size_sqft || submission.property_lot_size_sqft;
-            const lotSizeAcres =
-              lotInfo?.size_acres || submission.property_lot_size_acres;
-            const buildingSqft =
-              buildingInfo?.size_sqft || submission.property_building_sqft;
-            const yearBuilt =
-              buildingInfo?.year_built || submission.property_year_built;
-            const zoning = submission.property_zoning_description;
-            const currentUse = submission.property_current_usage;
-            const assessedValue =
-              valuationInfo?.assessed_value ||
-              submission.property_assessed_value;
-            const propertyType = submission.property_type;
-
-            // Count how many fields have data
-            const hasData = !!(
-              lotSizeSqft ||
-              buildingSqft ||
-              yearBuilt ||
-              zoning ||
-              currentUse ||
-              assessedValue
-            );
-
-            if (!hasData) {
-              return (
-                <div className='p-4 bg-yellow-50 border border-yellow-200 rounded-lg'>
-                  <p className='text-sm text-yellow-800'>
-                    ⚠️ Detailed property data is being processed. Check back
-                    soon or view the AI Assessment for development analysis.
-                  </p>
-                </div>
-              );
-            }
-
-            return (
-              <div className='grid grid-cols-2 md:grid-cols-3 gap-4'>
-                {lotSizeSqft && (
-                  <div className='p-3 bg-white border border-gray-200 rounded-lg'>
-                    <label className='text-xs font-medium text-gray-500 uppercase block mb-1'>
-                      Lot Size
-                    </label>
-                    <p className='text-lg font-bold text-gray-900'>
-                      {lotSizeSqft.toLocaleString()} sq ft
-                    </p>
-                    {lotSizeAcres > 0 && (
-                      <p className='text-xs text-gray-600'>
-                        ({lotSizeAcres.toFixed(2)} acres)
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {buildingSqft && (
-                  <div className='p-3 bg-white border border-gray-200 rounded-lg'>
-                    <label className='text-xs font-medium text-gray-500 uppercase block mb-1'>
-                      Building Size
-                    </label>
-                    <p className='text-lg font-bold text-gray-900'>
-                      {buildingSqft.toLocaleString()} sq ft
-                    </p>
-                  </div>
-                )}
-
-                {yearBuilt && (
-                  <div className='p-3 bg-white border border-gray-200 rounded-lg'>
-                    <label className='text-xs font-medium text-gray-500 uppercase block mb-1'>
-                      Year Built
-                    </label>
-                    <p className='text-lg font-bold text-gray-900'>
-                      {yearBuilt}
-                    </p>
-                  </div>
-                )}
-
-                {currentUse && (
-                  <div className='p-3 bg-white border border-gray-200 rounded-lg'>
-                    <label className='text-xs font-medium text-gray-500 uppercase block mb-1'>
-                      Current Use
-                    </label>
-                    <p className='text-sm font-medium text-gray-900'>
-                      {currentUse}
-                    </p>
-                  </div>
-                )}
-
-                {zoning && (
-                  <div className='p-3 bg-white border border-gray-200 rounded-lg'>
-                    <label className='text-xs font-medium text-gray-500 uppercase block mb-1'>
-                      Zoning
-                    </label>
-                    <p className='text-sm font-medium text-gray-900'>
-                      {zoning}
-                    </p>
-                  </div>
-                )}
-
-                {assessedValue && (
-                  <div className='p-3 bg-white border border-gray-200 rounded-lg'>
-                    <label className='text-xs font-medium text-gray-500 uppercase block mb-1'>
-                      Assessed Value
-                    </label>
-                    <p className='text-lg font-bold text-gray-900'>
-                      ${assessedValue.toLocaleString()}
-                    </p>
-                  </div>
-                )}
-
-                {propertyType && propertyType !== 'other' && (
-                  <div className='p-3 bg-white border border-gray-200 rounded-lg'>
-                    <label className='text-xs font-medium text-gray-500 uppercase block mb-1'>
-                      Property Type
-                    </label>
-                    <p className='text-sm font-medium text-gray-900 capitalize'>
-                      {propertyType}
-                    </p>
-                  </div>
-                )}
-              </div>
-            );
-          })()}
-        </CardContent>
-      </Card>
-
-      {/* Available Build Space & LOGOS Qualification */}
+      {/* Property Overview - Consolidated Card */}
       {(() => {
         const smartyData = getSmartyData();
-        const availableBuildSpace = smartyData?.available_build_space;
         const lotInfo = smartyData?.lot;
         const buildingInfo = smartyData?.building;
-        const valuationInfo = smartyData?.valuation;
-        const financialInfo = smartyData?.financial;
-
-        if (!smartyData) return null;
+        const combinedLotSize = smartyData?.property?.combined_lot_size_sqft;
+        const additionalAddresses =
+          smartyData?.property?.additional_addresses || [];
 
         return (
-          <Card className='mb-6 border-2 border-blue-200 bg-blue-50/30'>
+          <Card className='mb-6'>
             <CardHeader>
-              <div className='flex items-center justify-between'>
-                <CardTitle className='flex items-center gap-2'>
-                  <Building2 className='h-5 w-5 text-blue-600' />
-                  Available Build Space Analysis
-                </CardTitle>
-                {availableBuildSpace?.qualifies_for_logos && (
-                  <Badge className='bg-green-600 text-white text-sm px-3 py-1'>
-                    ✓ QUALIFIES FOR LOGOS
-                  </Badge>
+              <CardTitle className='flex items-center gap-2'>
+                <Building2 className='h-5 w-5' />
+                Property Overview
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {/* Address */}
+              <div className='mb-6 pb-4 border-b'>
+                {submission.property_street_address && (
+                  <h3 className='text-xl font-bold text-gray-900 mb-1'>
+                    {submission.property_street_address}
+                  </h3>
+                )}
+                {(submission.property_city ||
+                  submission.property_state ||
+                  submission.property_zip_code) && (
+                  <p className='text-gray-600 text-lg'>
+                    {[
+                      submission.property_city,
+                      submission.property_state,
+                      submission.property_zip_code,
+                    ]
+                      .filter(Boolean)
+                      .join(', ')}
+                  </p>
                 )}
               </div>
-            </CardHeader>
-            <CardContent className='space-y-6'>
-              {/* Key Metrics */}
-              <div className='grid grid-cols-1 md:grid-cols-3 gap-4'>
+
+              {/* Multi-Parcel Banner */}
+              {combinedLotSize && additionalAddresses.length > 0 && (
+                <div className='mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-300 rounded-lg'>
+                  <div className='flex items-center justify-between'>
+                    <div>
+                      <label className='text-xs font-bold text-blue-700 uppercase tracking-wide flex items-center gap-1 mb-1'>
+                        <Building2 className='h-4 w-4' />
+                        Multi-Parcel Development Site
+                      </label>
+                      <p className='text-2xl font-bold text-blue-900'>
+                        {combinedLotSize.toLocaleString()}{' '}
+                        <span className='text-base font-normal text-blue-700'>
+                          sq ft total
+                        </span>
+                      </p>
+                      <p className='text-sm text-blue-700 mt-1'>
+                        {1 + additionalAddresses.length} parcels combined
+                      </p>
+                    </div>
+                  </div>
+                  {/* Additional Addresses List */}
+                  <div className='mt-4 pt-4 border-t border-blue-200'>
+                    <label className='text-xs font-bold text-blue-700 uppercase block mb-2'>
+                      📍 Included Parcels
+                    </label>
+                    <div className='space-y-1'>
+                      <div className='text-sm text-blue-900'>
+                        • {submission.property_street_address}
+                      </div>
+                      {additionalAddresses.map((addr: any, idx: number) => (
+                        <div key={idx} className='text-sm text-blue-900'>
+                          • {addr.address}, {addr.city}, {addr.state}{' '}
+                          {addr.zip_code}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Key Metrics Grid */}
+              <div className='grid grid-cols-2 md:grid-cols-4 gap-4'>
                 {/* Lot Size */}
-                <div className='bg-white p-4 rounded-lg border'>
-                  <label className='text-xs font-medium text-gray-500 uppercase'>
+                <div className='p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg border border-blue-200'>
+                  <label className='text-xs font-medium text-blue-700 uppercase block mb-1'>
                     Lot Size
                   </label>
-                  <p className='text-2xl font-bold text-gray-900 mt-1'>
-                    {lotInfo?.size_sqft?.toLocaleString() || 'N/A'} sq ft
+                  <p className='text-2xl font-bold text-blue-900'>
+                    {(
+                      combinedLotSize ||
+                      lotInfo?.size_sqft ||
+                      submission.property_lot_size_sqft
+                    )?.toLocaleString() || 'N/A'}
                   </p>
-                  {lotInfo?.size_acres > 0 && (
-                    <p className='text-sm text-gray-600'>
-                      ({lotInfo.size_acres.toFixed(2)} acres)
+                  <p className='text-xs text-blue-600 mt-1'>sq ft</p>
+                  {(lotInfo?.size_acres ||
+                    submission.property_lot_size_acres) && (
+                    <p className='text-xs text-blue-600 mt-1'>
+                      (
+                      {(
+                        lotInfo?.size_acres ||
+                        submission.property_lot_size_acres
+                      )?.toFixed(2)}{' '}
+                      acres)
                     </p>
                   )}
                   {lotInfo?.lot_numbers && (
-                    <p className='text-xs text-gray-500 mt-1'>
+                    <p className='text-xs text-gray-600 mt-2'>
                       Lots: {lotInfo.lot_numbers}
                     </p>
                   )}
                   {lotInfo?.parcel_number && (
-                    <p className='text-xs text-gray-500'>
+                    <p className='text-xs text-gray-600'>
                       Parcel: {lotInfo.parcel_number}
                     </p>
                   )}
                 </div>
 
                 {/* Building Size */}
-                <div className='bg-white p-4 rounded-lg border'>
-                  <label className='text-xs font-medium text-gray-500 uppercase'>
+                <div className='p-4 bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg border border-gray-200'>
+                  <label className='text-xs font-medium text-gray-700 uppercase block mb-1'>
                     Building Size
                   </label>
-                  <p className='text-2xl font-bold text-gray-900 mt-1'>
-                    {buildingInfo?.size_sqft?.toLocaleString() || 'N/A'} sq ft
+                  <p className='text-2xl font-bold text-gray-900'>
+                    {(
+                      buildingInfo?.size_sqft ||
+                      submission.property_building_sqft
+                    )?.toLocaleString() || 'N/A'}
                   </p>
-                  {buildingInfo?.year_built && (
-                    <p className='text-sm text-gray-600'>
-                      Built: {buildingInfo.year_built}
-                    </p>
-                  )}
-                  {buildingInfo?.stories && (
-                    <p className='text-xs text-gray-500 mt-1'>
-                      {buildingInfo.stories}{' '}
-                      {buildingInfo.stories === 1 ? 'story' : 'stories'}
-                    </p>
-                  )}
+                  <p className='text-xs text-gray-600 mt-1'>sq ft</p>
                 </div>
 
-                {/* Available Build Space - THE MONEY NUMBER */}
-                <div
-                  className={`p-4 rounded-lg border-2 ${
-                    availableBuildSpace?.qualifies_for_logos
-                      ? 'bg-green-50 border-green-300'
-                      : 'bg-yellow-50 border-yellow-300'
-                  }`}
-                >
-                  <label className='text-xs font-medium uppercase flex items-center gap-1'>
-                    <TrendingUp className='h-3 w-3' />
-                    Available Build Space
+                {/* Year Built */}
+                <div className='p-4 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg border border-purple-200'>
+                  <label className='text-xs font-medium text-purple-700 uppercase block mb-1'>
+                    Year Built
                   </label>
-                  <p
-                    className={`text-2xl font-bold mt-1 ${
-                      availableBuildSpace?.qualifies_for_logos
-                        ? 'text-green-700'
-                        : 'text-yellow-700'
-                    }`}
-                  >
-                    {availableBuildSpace?.sqft?.toLocaleString() || 'N/A'} sq ft
+                  <p className='text-2xl font-bold text-purple-900'>
+                    {buildingInfo?.year_built ||
+                      submission.property_year_built ||
+                      'N/A'}
                   </p>
-                  <p className='text-xs mt-1 text-gray-600'>
-                    {availableBuildSpace?.calculation || 'Lot - Building'}
+                </div>
+
+                {/* Current Use */}
+                <div className='p-4 bg-gradient-to-br from-green-50 to-green-100 rounded-lg border border-green-200'>
+                  <label className='text-xs font-medium text-green-700 uppercase block mb-1'>
+                    Current Use
+                  </label>
+                  <p className='text-sm font-semibold text-green-900'>
+                    {submission.property_current_usage || 'N/A'}
                   </p>
-                  <p
-                    className={`text-xs mt-2 font-medium ${
-                      availableBuildSpace?.qualifies_for_logos
-                        ? 'text-green-700'
-                        : 'text-yellow-700'
-                    }`}
-                  >
-                    {availableBuildSpace?.qualifies_for_logos
-                      ? '✓ Meets 10,000 sq ft minimum'
-                      : `Below 10,000 sq ft requirement`}
+                </div>
+
+                {/* Zoning */}
+                <div className='p-4 bg-gradient-to-br from-amber-50 to-amber-100 rounded-lg border border-amber-200'>
+                  <label className='text-xs font-medium text-amber-700 uppercase block mb-1'>
+                    Zoning
+                  </label>
+                  <p className='text-xl font-bold text-amber-900'>
+                    {submission.property_zoning_description || 'N/A'}
                   </p>
                 </div>
               </div>
 
-              {/* Valuation Information */}
-              {valuationInfo &&
-                (valuationInfo.assessed_total > 0 ||
-                  valuationInfo.estimated_market_min > 0) && (
-                  <div className='bg-white p-4 rounded-lg border'>
-                    <h4 className='font-semibold mb-3 flex items-center gap-2'>
-                      <DollarSign className='h-4 w-4 text-green-600' />
-                      Property Valuation
-                    </h4>
-                    <div className='grid grid-cols-2 md:grid-cols-4 gap-4 text-sm'>
-                      {valuationInfo.assessed_total > 0 && (
-                        <div>
-                          <label className='text-gray-500'>
-                            Assessed Value
-                          </label>
-                          <p className='font-medium'>
-                            ${valuationInfo.assessed_total.toLocaleString()}
-                          </p>
-                          {valuationInfo.assessed_year && (
-                            <p className='text-xs text-gray-500'>
-                              ({valuationInfo.assessed_year})
-                            </p>
-                          )}
-                        </div>
-                      )}
-                      {valuationInfo.assessed_land > 0 && (
-                        <div>
-                          <label className='text-gray-500'>Land Value</label>
-                          <p className='font-medium'>
-                            ${valuationInfo.assessed_land.toLocaleString()}
-                          </p>
-                        </div>
-                      )}
-                      {valuationInfo.assessed_improvement > 0 && (
-                        <div>
-                          <label className='text-gray-500'>
-                            Improvement Value
-                          </label>
-                          <p className='font-medium'>
-                            $
-                            {valuationInfo.assessed_improvement.toLocaleString()}
-                          </p>
-                        </div>
-                      )}
-                      {valuationInfo.estimated_market_min > 0 && (
-                        <div>
-                          <label className='text-gray-500'>
-                            Est. Market Value
-                          </label>
-                          <p className='font-medium'>
-                            $
-                            {valuationInfo.estimated_market_min.toLocaleString()}{' '}
-                            - $
-                            {valuationInfo.estimated_market_max.toLocaleString()}
-                          </p>
-                        </div>
-                      )}
+              {/* Mortgage Status */}
+              {(() => {
+                const financialInfo = smartyData?.financial;
+                if (financialInfo && !financialInfo.has_mortgages) {
+                  return (
+                    <div className='mt-6 bg-green-50 p-4 rounded-lg border border-green-200'>
+                      <p className='text-sm text-green-800 font-medium flex items-center gap-2'>
+                        <CheckCircle className='h-4 w-4' />
+                        Property owned free and clear (no mortgages on record)
+                      </p>
                     </div>
-                  </div>
-                )}
-
-              {/* Financial History */}
-              {financialInfo?.has_mortgages &&
-                financialInfo.mortgages?.length > 0 && (
-                  <div className='bg-white p-4 rounded-lg border'>
-                    <h4 className='font-semibold mb-3'>Financial History</h4>
-                    <p className='text-sm text-gray-600 mb-2'>
-                      {financialInfo.mortgage_count} mortgage(s) on record -
-                      Total: $
-                      {financialInfo.total_mortgage_amount?.toLocaleString() ||
-                        '0'}
-                    </p>
-                    <div className='space-y-2 text-sm'>
-                      {financialInfo.mortgages
-                        .slice(0, 3)
-                        .map((mortgage: any, idx: number) => (
-                          <div
-                            key={idx}
-                            className='flex justify-between items-center p-2 bg-gray-50 rounded'
-                          >
-                            <div>
-                              <span className='font-medium'>
-                                {mortgage.lender || 'Unknown Lender'}
-                              </span>
-                              {mortgage.recording_date && (
-                                <span className='text-gray-500 ml-2'>
-                                  (
-                                  {new Date(
-                                    mortgage.recording_date
-                                  ).toLocaleDateString()}
-                                  )
-                                </span>
-                              )}
-                            </div>
-                            {mortgage.amount && (
-                              <span className='font-medium'>
-                                ${mortgage.amount.toLocaleString()}
-                              </span>
-                            )}
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                )}
-              {financialInfo && !financialInfo.has_mortgages && (
-                <div className='bg-green-50 p-3 rounded-lg border border-green-200'>
-                  <p className='text-sm text-green-800 font-medium'>
-                    ✓ Property owned free and clear (no mortgages on record)
-                  </p>
-                </div>
-              )}
+                  );
+                }
+                return null;
+              })()}
             </CardContent>
           </Card>
         );
       })()}
+
+      {/* Ownership & Financial Details */}
+      <Card className='mb-6'>
+        <CardHeader>
+          <CardTitle className='flex items-center gap-2'>
+            <DollarSign className='h-5 w-5' />
+            Ownership & Financial Details
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
+            {/* Ownership Status */}
+            <div className='p-4 bg-gray-50 rounded-lg border'>
+              <h4 className='font-semibold text-sm text-gray-700 mb-3'>
+                Property Ownership
+              </h4>
+              <div className='space-y-2 text-sm'>
+                <div className='flex justify-between items-center'>
+                  <span className='text-gray-600'>Owned Free & Clear:</span>
+                  <span className='font-medium'>
+                    {submission.owns_property_free_clear === true ? (
+                      <Badge className='bg-green-600'>✓ Yes</Badge>
+                    ) : submission.owns_property_free_clear === false ? (
+                      <Badge variant='destructive'>✗ No</Badge>
+                    ) : (
+                      'Not specified'
+                    )}
+                  </span>
+                </div>
+                {submission.has_mortgage !== null && (
+                  <div className='flex justify-between items-center'>
+                    <span className='text-gray-600'>Has Mortgage:</span>
+                    <span className='font-medium'>
+                      {submission.has_mortgage ? 'Yes' : 'No'}
+                    </span>
+                  </div>
+                )}
+                {submission.mortgage_balance && (
+                  <div className='flex justify-between items-center'>
+                    <span className='text-gray-600'>Mortgage Balance:</span>
+                    <span className='font-medium'>
+                      ${submission.mortgage_balance.toLocaleString()}
+                    </span>
+                  </div>
+                )}
+                <div className='flex justify-between items-center'>
+                  <span className='text-gray-600'>
+                    Willing to Ground Lease:
+                  </span>
+                  <span className='font-medium'>
+                    {submission.willing_to_ground_lease === true ? (
+                      <Badge className='bg-blue-600'>✓ Yes</Badge>
+                    ) : submission.willing_to_ground_lease === false ? (
+                      <Badge variant='outline'>✗ No</Badge>
+                    ) : (
+                      'Not specified'
+                    )}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Financial Details */}
+            <div className='p-4 bg-gray-50 rounded-lg border'>
+              <h4 className='font-semibold text-sm text-gray-700 mb-3'>
+                Financial Information
+              </h4>
+              <div className='space-y-2 text-sm'>
+                {submission.existing_debt_amount && (
+                  <div className='flex justify-between items-center'>
+                    <span className='text-gray-600'>Existing Debt:</span>
+                    <span className='font-medium'>
+                      ${submission.existing_debt_amount.toLocaleString()}
+                    </span>
+                  </div>
+                )}
+                {submission.expects_sanctuary_replacement !== null && (
+                  <div className='flex justify-between items-center'>
+                    <span className='text-gray-600'>
+                      Expects Sanctuary Replacement:
+                    </span>
+                    <span className='font-medium'>
+                      {submission.expects_sanctuary_replacement ? (
+                        <Badge variant='outline'>Yes</Badge>
+                      ) : (
+                        'No'
+                      )}
+                    </span>
+                  </div>
+                )}
+                {submission.sanctuary_replacement_cost_estimate && (
+                  <div className='flex justify-between items-center'>
+                    <span className='text-gray-600'>Estimated Cost:</span>
+                    <span className='font-medium'>
+                      $
+                      {submission.sanctuary_replacement_cost_estimate.toLocaleString()}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Congregation Approval */}
+      <Card className='mb-6'>
+        <CardHeader>
+          <CardTitle className='flex items-center gap-2'>
+            <Users className='h-5 w-5' />
+            Congregation Approval & Support
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
+            {/* Voting Status */}
+            <div className='p-4 bg-gray-50 rounded-lg border'>
+              <h4 className='font-semibold text-sm text-gray-700 mb-3'>
+                Congregation Vote
+              </h4>
+              <div className='space-y-3'>
+                <div className='flex justify-between items-center'>
+                  <span className='text-gray-600 text-sm'>
+                    Congregation Voted:
+                  </span>
+                  <span className='font-medium'>
+                    {submission.congregation_voted === true ? (
+                      <Badge className='bg-green-600'>✓ Yes</Badge>
+                    ) : submission.congregation_voted === false ? (
+                      <Badge variant='outline'>Not Yet</Badge>
+                    ) : (
+                      'Not specified'
+                    )}
+                  </span>
+                </div>
+                {submission.congregation_voted &&
+                  submission.vote_percentage !== null && (
+                    <div className='mt-4'>
+                      <div className='flex justify-between items-center mb-2'>
+                        <span className='text-gray-600 text-sm'>
+                          Approval Percentage:
+                        </span>
+                        <span className='text-2xl font-bold text-blue-600'>
+                          {submission.vote_percentage}%
+                        </span>
+                      </div>
+                      <div className='w-full bg-gray-200 rounded-full h-3'>
+                        <div
+                          className={`h-3 rounded-full ${
+                            submission.vote_percentage >= 66
+                              ? 'bg-green-500'
+                              : submission.vote_percentage > 50
+                              ? 'bg-yellow-500'
+                              : 'bg-red-500'
+                          }`}
+                          style={{ width: `${submission.vote_percentage}%` }}
+                        />
+                      </div>
+                      <p className='text-xs text-gray-500 mt-1'>
+                        {submission.vote_percentage >= 66
+                          ? '✓ Strong support (66%+)'
+                          : submission.vote_percentage > 50
+                          ? 'Meets minimum (>50%)'
+                          : '⚠️ Below minimum requirement'}
+                      </p>
+                    </div>
+                  )}
+              </div>
+            </div>
+
+            {/* Leadership & Decision Making */}
+            <div className='p-4 bg-gray-50 rounded-lg border'>
+              <h4 className='font-semibold text-sm text-gray-700 mb-3'>
+                Leadership & Decision Making
+              </h4>
+              <div className='space-y-2 text-sm'>
+                {submission.leadership_support && (
+                  <div className='flex justify-between items-start'>
+                    <span className='text-gray-600'>Leadership Support:</span>
+                    <span className='font-medium text-right'>
+                      {submission.leadership_support}
+                    </span>
+                  </div>
+                )}
+                {submission.decision_authority && (
+                  <div className='flex justify-between items-start'>
+                    <span className='text-gray-600'>Decision Authority:</span>
+                    <span className='font-medium text-right'>
+                      {submission.decision_authority}
+                    </span>
+                  </div>
+                )}
+                {submission.decision_timeline && (
+                  <div className='flex justify-between items-start'>
+                    <span className='text-gray-600'>Decision Timeline:</span>
+                    <span className='font-medium text-right'>
+                      {submission.decision_timeline}
+                    </span>
+                  </div>
+                )}
+                {submission.denomination_approval_needed !== null && (
+                  <div className='flex justify-between items-center'>
+                    <span className='text-gray-600'>
+                      Denomination Approval Needed:
+                    </span>
+                    <span className='font-medium'>
+                      {submission.denomination_approval_needed ? 'Yes' : 'No'}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Development Preferences */}
+      <Card className='mb-6'>
+        <CardHeader>
+          <CardTitle className='flex items-center gap-2'>
+            <Building2 className='h-5 w-5' />
+            Development Preferences & Requirements
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className='grid grid-cols-1 md:grid-cols-3 gap-6'>
+            {/* Parking */}
+            <div className='p-4 bg-blue-50 rounded-lg border border-blue-200'>
+              <h4 className='font-semibold text-sm text-blue-900 mb-3 flex items-center gap-2'>
+                🅿️ Parking Requirements
+              </h4>
+              <div className='space-y-2 text-sm'>
+                {submission.current_parking_spaces !== null && (
+                  <div className='flex justify-between items-center'>
+                    <span className='text-blue-700'>Current Spaces:</span>
+                    <span className='font-bold text-blue-900'>
+                      {submission.current_parking_spaces}
+                    </span>
+                  </div>
+                )}
+                {submission.parking_spaces_needed_after !== null && (
+                  <div className='flex justify-between items-center'>
+                    <span className='text-blue-700'>Needed After:</span>
+                    <span className='font-bold text-blue-900'>
+                      {submission.parking_spaces_needed_after}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Timeline & Units */}
+            <div className='p-4 bg-green-50 rounded-lg border border-green-200'>
+              <h4 className='font-semibold text-sm text-green-900 mb-3 flex items-center gap-2'>
+                📅 Timeline & Units
+              </h4>
+              <div className='space-y-2 text-sm'>
+                {submission.timeline_preference && (
+                  <div className='flex justify-between items-start'>
+                    <span className='text-green-700'>Timeline:</span>
+                    <span className='font-bold text-green-900 text-right'>
+                      {submission.timeline_preference}
+                    </span>
+                  </div>
+                )}
+                {submission.preferred_unit_count !== null && (
+                  <div className='flex justify-between items-center'>
+                    <span className='text-green-700'>Preferred Units:</span>
+                    <span className='font-bold text-green-900'>
+                      {submission.preferred_unit_count}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Financial Preferences */}
+            <div className='p-4 bg-purple-50 rounded-lg border border-purple-200'>
+              <h4 className='font-semibold text-sm text-purple-900 mb-3 flex items-center gap-2'>
+                💰 Financial Structure
+              </h4>
+              <div className='space-y-2 text-sm'>
+                {submission.revenue_sharing_preference && (
+                  <div>
+                    <span className='text-purple-700 block mb-1'>
+                      Revenue Sharing:
+                    </span>
+                    <span className='font-bold text-purple-900'>
+                      {submission.revenue_sharing_preference}
+                    </span>
+                  </div>
+                )}
+                {submission.affordability_target && (
+                  <div>
+                    <span className='text-purple-700 block mb-1'>
+                      Target Income:
+                    </span>
+                    <span className='font-bold text-purple-900 text-xs'>
+                      {submission.affordability_target}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Special Requirements */}
+          {submission.special_requirements && (
+            <div className='mt-6 p-4 bg-amber-50 rounded-lg border border-amber-200'>
+              <h4 className='font-semibold text-sm text-amber-900 mb-2 flex items-center gap-2'>
+                ⭐ Special Requirements & Considerations
+              </h4>
+              <p className='text-sm text-amber-900 whitespace-pre-wrap'>
+                {submission.special_requirements}
+              </p>
+            </div>
+          )}
+
+          {/* Development Involvement */}
+          {submission.development_involvement_level && (
+            <div className='mt-4 p-3 bg-gray-100 rounded border'>
+              <div className='flex items-center justify-between'>
+                <span className='text-sm text-gray-600'>
+                  Development Involvement Level:
+                </span>
+                <span className='font-medium text-gray-900'>
+                  {submission.development_involvement_level}
+                </span>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Admin Notes */}
 
