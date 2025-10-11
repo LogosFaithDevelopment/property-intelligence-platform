@@ -17,8 +17,8 @@ sys.path.append(str(Path(__file__).parent))
 
 from app.config import get_settings
 from app.database import create_tables, engine
-from app.routers import (admin_auth, assessments, auth, churches, properties,
-                         reports, submissions)
+from app.routers import (admin_actions, admin_auth, admin_stats, assessments,
+                         auth, churches, properties, reports, submissions)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -108,6 +108,8 @@ async def global_exception_handler(request, exc):
 # Include routers
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(admin_auth.router, prefix="/api/v1", tags=["Admin Auth"])
+app.include_router(admin_stats.router)  # Admin stats (includes /api/v1 prefix)
+app.include_router(admin_actions.router)  # Admin actions (includes /api/v1 prefix)
 app.include_router(submissions.router, prefix="/api/v1/submissions", tags=["Submissions"])
 app.include_router(churches.router, prefix="/api/v1/churches", tags=["Churches"])
 app.include_router(properties.router, prefix="/api/v1/properties", tags=["Properties"])

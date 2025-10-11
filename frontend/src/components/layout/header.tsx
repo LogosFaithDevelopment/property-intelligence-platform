@@ -60,7 +60,7 @@ export function Header() {
                     />
                   </div>
                 ) : (
-                  <Link href='/sign-in?redirect_url=/submit-property'>
+                  <Link href='/sign-in'>
                     <Button size='sm'>Sign In</Button>
                   </Link>
                 )}

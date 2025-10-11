@@ -50,6 +50,10 @@ class PropertySubmissionData(BaseSchema):
     state: str = Field(..., max_length=50, description="State")
     zip_code: str = Field(..., max_length=20, description="ZIP code")
     
+    # Multi-Address Support
+    demolish_all_structures: Optional[bool] = Field(default=False, description="Plan to demolish all existing structures")
+    additional_addresses: Optional[list] = Field(default=None, description="Additional addresses for multi-parcel properties")
+    
     # Geospatial Data
     latitude: Optional[float] = Field(None, ge=-90, le=90, description="Latitude")
     longitude: Optional[float] = Field(None, ge=-180, le=180, description="Longitude")

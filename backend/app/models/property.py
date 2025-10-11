@@ -96,6 +96,10 @@ class Property(BaseModel, UUIDMixin, SoftDeleteMixin):
     has_gas = Column(Boolean, default=False, nullable=False)
     internet_available = Column(Boolean, default=True, nullable=False)
     
+    # Development Plans
+    demolish_all_structures = Column(Boolean, default=False, nullable=False)  # Plan to demolish existing buildings
+    additional_addresses = Column(JSON, nullable=True)  # Array of additional property addresses for multi-parcel developments
+    
     # Church-Specific Information
     parking_spaces = Column(Integer, nullable=True)
     accessibility_features = Column(Text, nullable=True)  # ADA compliance, ramps, etc.

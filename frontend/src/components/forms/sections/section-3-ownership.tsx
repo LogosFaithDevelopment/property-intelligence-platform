@@ -256,6 +256,123 @@ export function Section3Ownership({ form }: Section3OwnershipProps) {
           </FormItem>
         )}
       />
+
+      {/* PHASE 2: DEAL BREAKER FIELDS */}
+      <div className='border-t pt-6 mt-6'>
+        <h3 className='text-lg font-semibold mb-4'>
+          Existing Debt & Obligations
+        </h3>
+
+        {/* Existing Debt Amount */}
+        <FormField
+          control={form.control}
+          name='existing_debt_amount'
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Existing Debt Amount (Optional)</FormLabel>
+              <FormControl>
+                <Input
+                  type='number'
+                  placeholder='e.g., 500000'
+                  {...field}
+                  value={
+                    field.value === undefined ||
+                    field.value === null ||
+                    isNaN(field.value)
+                      ? ''
+                      : String(field.value)
+                  }
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    field.onChange(val === '' ? undefined : Number(val));
+                  }}
+                />
+              </FormControl>
+              <FormDescription>
+                Total amount of existing debt on the property. Debt exceeding
+                20% of property value is a concern.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* Sanctuary Replacement Expectation */}
+        <FormField
+          control={form.control}
+          name='expects_sanctuary_replacement'
+          render={({ field }) => (
+            <FormItem className='mt-4'>
+              <FormLabel>
+                Does your church expect a sanctuary replacement?
+              </FormLabel>
+              <Select
+                onValueChange={(value) => field.onChange(value === 'true')}
+                value={
+                  field.value === undefined ? undefined : String(field.value)
+                }
+              >
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder='Select an option' />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value='true'>
+                    Yes - We expect a new sanctuary
+                  </SelectItem>
+                  <SelectItem value='false'>
+                    No - No sanctuary replacement needed
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <FormDescription>
+                Sanctuary replacement significantly increases project costs and
+                may impact feasibility
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* Sanctuary Replacement Cost Estimate (conditional) */}
+        {form.watch('expects_sanctuary_replacement') === true && (
+          <FormField
+            control={form.control}
+            name='sanctuary_replacement_cost_estimate'
+            render={({ field }) => (
+              <FormItem className='mt-4'>
+                <FormLabel>
+                  Estimated Sanctuary Replacement Cost (Optional)
+                </FormLabel>
+                <FormControl>
+                  <Input
+                    type='number'
+                    placeholder='e.g., 2000000'
+                    {...field}
+                    value={
+                      field.value === undefined ||
+                      field.value === null ||
+                      isNaN(field.value)
+                        ? ''
+                        : String(field.value)
+                    }
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      field.onChange(val === '' ? undefined : Number(val));
+                    }}
+                  />
+                </FormControl>
+                <FormDescription>
+                  If known, what is the estimated cost to build a replacement
+                  sanctuary?
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
+      </div>
     </div>
   );
 }

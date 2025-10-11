@@ -3,6 +3,8 @@ Admin Authentication Router
 Handles admin authentication using Clerk JWT tokens and role checking
 """
 
+import base64
+import json
 from datetime import datetime
 from typing import Optional
 
@@ -10,7 +12,6 @@ from app.database import get_db
 from app.models.admin_user import AdminRole, AdminUser
 from app.schemas.admin import AdminUserResponse
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from jose import JWTError, jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,10 +34,23 @@ async def get_clerk_user_id_from_request(request: Request) -> str:
     token = auth_header.split(" ")[1]
     
     try:
-        # Decode Clerk JWT token
+        # Decode Clerk JWT token manually (development only)
         # Note: In production, you should verify the signature with Clerk's public key
-        # For now, we'll decode without verification (development only)
-        payload = jwt.decode(token, options={"verify_signature": False})
+        # Split JWT into parts (header.payload.signature)
+        parts = token.split('.')
+        if len(parts) != 3:
+            raise ValueError("Invalid JWT format")
+        
+        # Decode payload (middle part) - it's base64url encoded
+        payload_b64 = parts[1]
+        # Add padding if needed (base64 requires length to be multiple of 4)
+        padding = 4 - len(payload_b64) % 4
+        if padding != 4:
+            payload_b64 += '=' * padding
+        
+        # Decode from base64 and parse JSON
+        payload_json = base64.urlsafe_b64decode(payload_b64)
+        payload = json.loads(payload_json)
         
         # Clerk JWT has 'sub' field containing the user ID
         clerk_user_id = payload.get("sub")
@@ -49,7 +63,7 @@ async def get_clerk_user_id_from_request(request: Request) -> str:
         
         return clerk_user_id
         
-    except JWTError as e:
+    except (ValueError, json.JSONDecodeError, KeyError) as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Invalid token: {str(e)}"
@@ -58,11 +72,16 @@ async def get_clerk_user_id_from_request(request: Request) -> str:
 
 async def get_current_admin_user(
     request: Request,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    update_last_login: bool = False
 ) -> AdminUser:
     """
     Dependency to get the current authenticated admin user.
     Verifies Clerk token and checks if user has admin role.
+    
+    Args:
+        update_last_login: If True, updates the last_login timestamp (for actual logins).
+                          If False, skips the update (for quick auth checks).
     """
     clerk_user_id = await get_clerk_user_id_from_request(request)
     
@@ -84,9 +103,10 @@ async def get_current_admin_user(
             detail="Admin account is deactivated"
         )
     
-    # Update last login
-    admin_user.last_login = datetime.utcnow()
-    await db.commit()
+    # Only update last login if explicitly requested (e.g., for /auth/me endpoint)
+    if update_last_login:
+        admin_user.last_login = datetime.utcnow()
+        await db.commit()
     
     return admin_user
 
@@ -111,12 +131,15 @@ def require_role(required_role: AdminRole):
 
 @router.get("/auth/me", response_model=AdminUserResponse)
 async def get_current_admin_info(
-    current_user: AdminUser = Depends(get_current_admin_user)
+    request: Request,
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Get current authenticated admin user info.
     Verifies Clerk token and returns admin role/permissions.
+    Updates last_login timestamp.
     """
+    current_user = await get_current_admin_user(request, db, update_last_login=True)
     return AdminUserResponse.from_orm(current_user)
 
 
@@ -133,3 +156,62 @@ async def check_admin_access(
         "role": current_user.role.value,
         "email": current_user.email
     }
+
+
+@router.get("/auth/users", response_model=list[AdminUserResponse])
+async def list_admin_users(
+    current_user: AdminUser = Depends(require_role(AdminRole.SUPERADMIN)),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    List all admin users (Superadmin only).
+    """
+    result = await db.execute(
+        select(AdminUser).order_by(AdminUser.created_at.desc())
+    )
+    admin_users = result.scalars().all()
+    
+    return [AdminUserResponse.from_orm(user) for user in admin_users]
+
+
+@router.patch("/auth/users/{user_id}")
+async def update_admin_user(
+    user_id: int,
+    is_active: Optional[bool] = None,
+    role: Optional[AdminRole] = None,
+    current_user: AdminUser = Depends(require_role(AdminRole.SUPERADMIN)),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Update admin user status or role (Superadmin only).
+    Cannot modify superadmin accounts.
+    """
+    result = await db.execute(
+        select(AdminUser).where(AdminUser.id == user_id)
+    )
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Admin user not found"
+        )
+    
+    # Prevent modifying superadmin accounts
+    if user.role == AdminRole.SUPERADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot modify superadmin accounts"
+        )
+    
+    # Update fields
+    if is_active is not None:
+        user.is_active = is_active
+    
+    if role is not None:
+        user.role = role
+    
+    await db.commit()
+    await db.refresh(user)
+    
+    return AdminUserResponse.from_orm(user)

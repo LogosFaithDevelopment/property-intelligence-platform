@@ -74,6 +74,29 @@ export const REVENUE_SHARING_OPTIONS = [
 
 export type RevenueSharingPreference = (typeof REVENUE_SHARING_OPTIONS)[number];
 
+// ========== PHASE 2 & 3: LOGOS DEAL FRAMEWORK OPTIONS ==========
+
+// Decision Making Authority Options (Phase 3)
+export const DECISION_AUTHORITY_OPTIONS = [
+  'pastor',
+  'board',
+  'congregation',
+  'denomination',
+] as const;
+
+export type DecisionAuthority = (typeof DECISION_AUTHORITY_OPTIONS)[number];
+
+// Decision Timeline Options (Phase 3)
+export const DECISION_TIMELINE_OPTIONS = [
+  'immediate',
+  '1-3_months',
+  '3-6_months',
+  '6-12_months',
+  'unsure',
+] as const;
+
+export type DecisionTimeline = (typeof DECISION_TIMELINE_OPTIONS)[number];
+
 /**
  * Complete Church Submission Form Data
  * This matches the backend API payload structure
@@ -110,6 +133,15 @@ export interface ChurchSubmissionFormData {
   property_zip_code: string;
   latitude?: number;
   longitude?: number;
+
+  // Multi-Address Support (NEW FIELDS)
+  demolish_all_structures?: boolean; // Plan to demolish all existing structures
+  additional_addresses?: Array<{
+    address: string;
+    city: string;
+    state: string;
+    zip_code: string;
+  }>; // Additional addresses for multi-parcel properties
 
   // Property Characteristics
   lot_size_sqft?: number;

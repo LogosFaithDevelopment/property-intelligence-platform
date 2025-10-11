@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     google_maps_api_key: Optional[str] = Field(None, alias="GOOGLE_MAPS_API_KEY")
     rentberry_api_key: Optional[str] = Field(None, alias="RENTBERRY_API_KEY")
     
+    # Smarty API (Property Data - replaces ATTOM for commercial properties)
+    smarty_auth_id: Optional[str] = Field(None, alias="SMARTY_AUTH_ID")
+    smarty_auth_token: Optional[str] = Field(None, alias="SMARTY_AUTH_TOKEN")
+    smarty_website_key: Optional[str] = Field(None, alias="SMARTY_WEBSITE_KEY")
+    
     # API Configuration
     api_rate_limit: int = Field(default=60, alias="API_RATE_LIMIT_PER_MINUTE")
     premium_rate_limit: int = Field(default=1000, alias="PREMIUM_API_RATE_LIMIT_PER_MINUTE")

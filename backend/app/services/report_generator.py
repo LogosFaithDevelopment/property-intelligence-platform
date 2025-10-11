@@ -1322,8 +1322,13 @@ class ReportGenerator:
             
             # Financial metrics
             roi = revenue_proj.get('roi_percent', 0)
-            cap_rate = revenue_proj.get('cap_rate', 0)
+            yield_on_cost = revenue_proj.get('yield_on_cost') or revenue_proj.get('cap_rate', 0)
             cash_on_cash = revenue_proj.get('cash_on_cash_return', 0)
+            
+            # IRR Analysis
+            irr_percent = revenue_proj.get('irr_percent')
+            irr_analysis = revenue_proj.get('irr_analysis', {})
+            meets_irr_target = irr_analysis.get('meets_logos_target', False)
             
             # Build space info
             using_available_space = proj.get('using_available_space', False)
@@ -1350,8 +1355,9 @@ class ReportGenerator:
                 ['Net Operating Income (NOI)', f"${noi:,.0f}" if noi else "N/A"],
                 ['Total Development Cost', f"${total_dev_cost:,.0f}" if total_dev_cost else "N/A"],
                 ['Cost Per Unit', f"${cost_per_unit:,.0f}" if cost_per_unit else "N/A"],
+                ['IRR (10-year hold)', f"{irr_percent:.2f}% {'✓ Meets 20% target' if meets_irr_target else '(Target: 20%)'}" if irr_percent is not None else "Calculating..."],
                 ['Return on Investment (ROI)', f"{roi:.2f}%" if roi else "N/A"],
-                ['Cap Rate', f"{cap_rate:.2f}%" if cap_rate else "N/A"],
+                ['Yield on Cost (YOC)', f"{yield_on_cost:.2f}% (Target: 7%)" if yield_on_cost else "N/A"],
                 ['Cash-on-Cash Return', f"{cash_on_cash:.2f}%" if cash_on_cash else "N/A"],
             ]
             

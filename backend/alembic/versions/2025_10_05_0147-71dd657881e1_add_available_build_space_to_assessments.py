@@ -1,16 +1,16 @@
 """add_available_build_space_to_assessments
 
 Revision ID: 71dd657881e1
-Revises: add_user_tracking_001
+Revises: 
 Create Date: 2025-10-05 01:47:13.472860+00:00
 
 """
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "71dd657881e1"
-down_revision = "add_user_tracking_001"
+down_revision = None
 branch_labels = None
 depends_on = None
 

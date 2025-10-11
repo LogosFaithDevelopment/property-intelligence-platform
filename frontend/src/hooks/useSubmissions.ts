@@ -93,6 +93,10 @@ function transformFormDataToApiPayload(
       state: cleaned.property_state,
       zip_code: cleaned.property_zip_code,
 
+      // Multi-Address Support
+      demolish_all_structures: cleaned.demolish_all_structures,
+      additional_addresses: cleaned.additional_addresses,
+
       // Geospatial Data
       latitude: cleaned.latitude,
       longitude: cleaned.longitude,

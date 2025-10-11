@@ -4,7 +4,7 @@ import './globals.css';
 import { ClerkProvider } from '@clerk/nextjs';
 import { ReactQueryProvider } from '@/providers/react-query-provider';
 import { Toaster } from 'sonner';
-import { Header } from '@/components/layout/header';
+import { ConditionalHeader } from '@/components/layout/conditional-header';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -26,7 +26,7 @@ export default function RootLayout({
     <ClerkProvider>
       <html lang='en'>
         <body className={`${inter.variable} font-sans antialiased`}>
-          <Header />
+          <ConditionalHeader />
           <ReactQueryProvider>
             {children}
             <Toaster position='top-right' />

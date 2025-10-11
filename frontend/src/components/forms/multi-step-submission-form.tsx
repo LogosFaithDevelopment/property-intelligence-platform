@@ -59,12 +59,19 @@ const STEP_FIELDS = {
     'has_mortgage',
     'mortgage_balance',
     'assessed_value',
+    'existing_debt_amount',
+    'expects_sanctuary_replacement',
+    'sanctuary_replacement_cost_estimate',
   ] as const,
   4: [
     'congregation_voted',
     'vote_percentage',
     'leadership_support',
     'denomination_approval_needed',
+    'decision_making_authority',
+    'decision_timeline',
+    'accepts_60_40_ownership',
+    'willing_to_pay_deposit',
   ] as const,
   5: [
     'current_parking_spaces',
@@ -121,11 +128,12 @@ const DRAFT_STEP_KEY = 'church-submission-step';
 export function MultiStepSubmissionForm() {
   const [currentStep, setCurrentStep] = useState(1);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [isTransitioning, setIsTransitioning] = useState(false);
   const router = useRouter();
   const { mutate: submitProperty, isPending } = useSubmitProperty();
 
   const form = useForm<FormData>({
-    resolver: zodResolver(churchSubmissionSchema),
+    resolver: zodResolver(churchSubmissionSchema) as any,
     mode: 'onBlur',
     defaultValues: {
       // Church defaults
@@ -150,6 +158,8 @@ export function MultiStepSubmissionForm() {
       property_city: '',
       property_state: '',
       property_zip_code: '',
+      demolish_all_structures: false,
+      additional_addresses: [],
       latitude: null,
       longitude: null,
       lot_size_sqft: undefined,
@@ -164,11 +174,20 @@ export function MultiStepSubmissionForm() {
       has_mortgage: false,
       mortgage_balance: undefined,
       assessed_value: undefined,
+      // Phase 2: Deal Breaker defaults
+      existing_debt_amount: undefined,
+      expects_sanctuary_replacement: undefined,
+      sanctuary_replacement_cost_estimate: undefined,
       // Approval defaults
       congregation_voted: undefined,
       vote_percentage: undefined,
       leadership_support: undefined,
       denomination_approval_needed: undefined,
+      // Phase 3: Partnership Quality defaults
+      decision_making_authority: undefined,
+      decision_timeline: undefined,
+      accepts_60_40_ownership: undefined,
+      willing_to_pay_deposit: undefined,
       // Parking defaults
       current_parking_spaces: undefined,
       parking_spaces_needed_after: undefined,
@@ -239,6 +258,10 @@ export function MultiStepSubmissionForm() {
   };
 
   const handleNext = async () => {
+    console.log(
+      `⏭️ handleNext called - Current step: ${currentStep} of ${STEPS.length}`
+    );
+
     // Get the fields for the current step
     const fieldsToValidate =
       STEP_FIELDS[currentStep as keyof typeof STEP_FIELDS];
@@ -265,8 +288,18 @@ export function MultiStepSubmissionForm() {
 
     if (isValid) {
       if (currentStep < STEPS.length) {
+        console.log(
+          `✅ Validation passed - Advancing from step ${currentStep} to ${
+            currentStep + 1
+          }`
+        );
+        setIsTransitioning(true);
         setCurrentStep((prev) => prev + 1);
         window.scrollTo({ top: 0, behavior: 'smooth' });
+        // Clear transition flag after a brief delay
+        setTimeout(() => setIsTransitioning(false), 300);
+      } else {
+        console.log(`⚠️ Already on last step (${currentStep}), not advancing`);
       }
     } else {
       // Get the errors for better feedback
@@ -440,14 +473,33 @@ export function MultiStepSubmissionForm() {
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            // Get form data directly without validation
-            const data = form.getValues();
-            onSubmit(data);
+            console.log(
+              `📝 Form onSubmit triggered - Current step: ${currentStep} of ${STEPS.length}, isTransitioning: ${isTransitioning}`
+            );
+
+            // PREVENT submission if we're transitioning between steps
+            if (isTransitioning) {
+              console.log('🚫 Ignoring submit during transition');
+              return;
+            }
+
+            // Only allow submission if on the last step
+            if (currentStep === STEPS.length) {
+              console.log('✅ On last step - submitting form');
+              const data = form.getValues();
+              onSubmit(data);
+            } else {
+              console.log(
+                `⏭️ Not on last step (step ${currentStep}) - calling handleNext instead`
+              );
+              // If not on last step, treat it like clicking Next button
+              handleNext();
+            }
           }}
           className='space-y-8'
         >
           <div className='rounded-lg border bg-white p-6 shadow-sm'>
-            <CurrentStepComponent form={form} />
+            <CurrentStepComponent form={form as any} />
           </div>
 
           {/* Navigation Buttons */}

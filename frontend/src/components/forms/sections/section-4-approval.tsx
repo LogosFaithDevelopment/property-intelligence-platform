@@ -18,7 +18,11 @@ import {
 } from '@/components/ui/select';
 import { UseFormReturn } from 'react-hook-form';
 import { ChurchSubmissionFormValues } from '@/lib/validations/submission';
-import { LEADERSHIP_SUPPORT_OPTIONS } from '@/types/church';
+import {
+  LEADERSHIP_SUPPORT_OPTIONS,
+  DECISION_AUTHORITY_OPTIONS,
+  DECISION_TIMELINE_OPTIONS,
+} from '@/types/church';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertTriangle, CheckCircle, Info } from 'lucide-react';
 
@@ -273,6 +277,177 @@ export function Section4Approval({ form }: Section4ApprovalProps) {
           </AlertDescription>
         </Alert>
       )}
+
+      {/* PHASE 3: PARTNERSHIP QUALITY FIELDS */}
+      <div className='border-t pt-6 mt-6'>
+        <h3 className='text-lg font-semibold mb-4'>
+          Decision-Making & Partnership Structure
+        </h3>
+
+        {/* Decision Making Authority */}
+        <FormField
+          control={form.control}
+          name='decision_making_authority'
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>
+                Who has primary decision-making authority? (Optional)
+              </FormLabel>
+              <Select onValueChange={field.onChange} value={field.value}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder='Select authority structure' />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {DECISION_AUTHORITY_OPTIONS.map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {option === 'pastor' && 'Pastor/Senior Leadership'}
+                      {option === 'board' && 'Church Board/Elders'}
+                      {option === 'congregation' && 'Congregation Vote'}
+                      {option === 'denomination' && 'Denomination Approval'}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormDescription>
+                Clear decision-making authority helps expedite the partnership
+                process
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* Decision Timeline */}
+        <FormField
+          control={form.control}
+          name='decision_timeline'
+          render={({ field }) => (
+            <FormItem className='mt-4'>
+              <FormLabel>Expected decision timeline? (Optional)</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder='Select expected timeline' />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {DECISION_TIMELINE_OPTIONS.map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {option === 'immediate' && 'Immediate (within 1 month)'}
+                      {option === '1-3_months' && '1-3 months'}
+                      {option === '3-6_months' && '3-6 months'}
+                      {option === '6-12_months' && '6-12 months'}
+                      {option === 'unsure' && 'Unsure'}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormDescription>
+                How quickly can your church make a final partnership decision?
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* 60/40 Ownership Structure */}
+        <FormField
+          control={form.control}
+          name='accepts_60_40_ownership'
+          render={({ field }) => (
+            <FormItem className='mt-4'>
+              <FormLabel>
+                Would your church accept a 60/40 ownership split? (Optional)
+              </FormLabel>
+              <Select
+                onValueChange={(value) => field.onChange(value === 'true')}
+                value={
+                  field.value === undefined ? undefined : String(field.value)
+                }
+              >
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder='Select an option' />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value='true'>Yes - Acceptable</SelectItem>
+                  <SelectItem value='false'>
+                    No - Prefer different structure
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <FormDescription>
+                LOGOS typically structures deals with 60% LOGOS ownership, 40%
+                church ownership
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* Ownership Alignment Alert */}
+        {form.watch('accepts_60_40_ownership') === true && (
+          <Alert className='border-green-500 bg-green-50 mt-4'>
+            <CheckCircle className='h-4 w-4 text-green-600' />
+            <AlertDescription className='text-green-800'>
+              ✅ Great! This aligns with LOGOS&apos;s standard partnership
+              structure.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {form.watch('accepts_60_40_ownership') === false && (
+          <Alert className='border-yellow-500 bg-yellow-50 mt-4'>
+            <Info className='h-4 w-4 text-yellow-600' />
+            <AlertDescription className='text-yellow-800'>
+              We can discuss alternative ownership structures, though 60/40 is
+              our standard model.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Deposit Willingness */}
+        <FormField
+          control={form.control}
+          name='willing_to_pay_deposit'
+          render={({ field }) => (
+            <FormItem className='mt-4'>
+              <FormLabel>
+                Would your church be willing to pay a $5,000 good faith deposit?
+                (Optional)
+              </FormLabel>
+              <Select
+                onValueChange={(value) => field.onChange(value === 'true')}
+                value={
+                  field.value === undefined ? undefined : String(field.value)
+                }
+              >
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder='Select an option' />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value='true'>
+                    Yes - Willing to pay deposit
+                  </SelectItem>
+                  <SelectItem value='false'>
+                    No - Not able to pay deposit
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <FormDescription>
+                Deposit demonstrates commitment and helps cover initial due
+                diligence costs
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      </div>
     </div>
   );
 }

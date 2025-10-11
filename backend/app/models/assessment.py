@@ -81,6 +81,18 @@ class Assessment(BaseModel, UUIDMixin):
     development_involvement_level = Column(String(50), nullable=True)
     special_requirements = Column(Text, nullable=True)
     
+    # Phase 2: Deal Breaker Fields (LOGOS Requirements)
+    existing_debt_amount = Column(Float, nullable=True)  # Current church debt amount
+    debt_to_value_ratio = Column(Float, nullable=True)  # Calculated: debt / assessed_value (deal breaker if >20%)
+    expects_sanctuary_replacement = Column(Boolean, nullable=True)  # Does church expect new sanctuary?
+    sanctuary_replacement_cost_estimate = Column(Float, nullable=True)  # Estimated cost if yes
+    
+    # Phase 3: Partnership Enhancement Fields (LOGOS Requirements)
+    decision_making_authority = Column(String(50), nullable=True)  # "pastor", "board", "congregation", "denomination"
+    decision_timeline = Column(String(50), nullable=True)  # "immediate", "1-3_months", "3-6_months", "6-12_months", "unsure"
+    accepts_60_40_ownership = Column(Boolean, nullable=True)  # Willing to accept 60% LOGOS / 40% Church split
+    willing_to_pay_deposit = Column(Boolean, nullable=True)  # Willing to pay $5K refundable deposit
+    
     # AI Scoring Results (0-100 scale)
     overall_score = Column(Float, nullable=True)
     location_score = Column(Float, nullable=True)
