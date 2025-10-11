@@ -508,29 +508,29 @@ export default function AssessmentVisualizationPage({
 
         return (
           <Card className='mb-6 border-2 border-gray-300'>
-            <CardHeader className='bg-gray-50 py-3'>
-              <CardTitle className='text-lg flex items-center gap-2'>
-                <MapPin className='h-5 w-5 text-blue-600' />
+            <CardHeader className='bg-gray-50 py-2 pb-2'>
+              <CardTitle className='text-base flex items-center gap-2'>
+                <MapPin className='h-4 w-4 text-blue-600' />
                 Property Overview
               </CardTitle>
             </CardHeader>
-            <CardContent className='pt-4 pb-4'>
+            <CardContent className='pt-2 pb-3'>
               {/* Primary Address */}
               <div className='mb-4 pb-4 border-b border-gray-200'>
-                <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+                <div className='grid grid-cols-1 md:grid-cols-4 gap-3'>
                   <div>
-                    <label className='text-xs font-semibold text-gray-500 uppercase block mb-1'>
+                    <label className='text-xs font-semibold text-gray-500 uppercase block mb-0.5'>
                       Street Address
                     </label>
-                    <p className='text-lg font-semibold text-gray-900'>
+                    <p className='text-base font-semibold text-gray-900'>
                       {submission.property_street_address || 'N/A'}
                     </p>
                   </div>
                   <div>
-                    <label className='text-xs font-semibold text-gray-500 uppercase block mb-1'>
+                    <label className='text-xs font-semibold text-gray-500 uppercase block mb-0.5'>
                       City, State, ZIP
                     </label>
-                    <p className='text-lg font-semibold text-gray-900'>
+                    <p className='text-base font-semibold text-gray-900'>
                       {[
                         submission.property_city,
                         submission.property_state,
@@ -541,11 +541,19 @@ export default function AssessmentVisualizationPage({
                     </p>
                   </div>
                   <div>
-                    <label className='text-xs font-semibold text-gray-500 uppercase block mb-1'>
+                    <label className='text-xs font-semibold text-gray-500 uppercase block mb-0.5'>
                       County
                     </label>
-                    <p className='text-lg font-semibold text-gray-900'>
+                    <p className='text-base font-semibold text-gray-900'>
                       {submission.property_county || 'N/A'}
+                    </p>
+                  </div>
+                  <div>
+                    <label className='text-xs font-semibold text-gray-500 uppercase block mb-0.5'>
+                      Year Built
+                    </label>
+                    <p className='text-base font-semibold text-gray-900'>
+                      {buildingInfo?.year_built || 'N/A'}
                     </p>
                   </div>
                 </div>
@@ -706,7 +714,7 @@ export default function AssessmentVisualizationPage({
               )}
 
               {/* Combined Site Summary (for multi-parcel) */}
-              {combinedLotSize && (
+              {/* {combinedLotSize && (
                 <div className='p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border-2 border-green-300'>
                   <h3 className='font-bold text-base text-green-900 mb-2 flex items-center gap-2'>
                     <Building2 className='h-5 w-5' />
@@ -742,7 +750,7 @@ export default function AssessmentVisualizationPage({
                     )}
                   </div>
                 </div>
-              )}
+              )} */}
             </CardContent>
           </Card>
         );
@@ -919,7 +927,13 @@ export default function AssessmentVisualizationPage({
             </CardTitle>
             <p className='text-sm text-gray-600 mt-2'>
               Updated Requirements (Oct 2025): $325K/unit construction cost, 425
-              sqft average unit size, 20% equity / 80% debt financing
+              sqft planning factor (gross area), 20% equity / 80% debt financing
+            </p>
+            <p className='text-sm text-gray-600 mt-1'>
+              <strong>
+                Unit totals based on conservative 65% site coverage
+              </strong>{' '}
+              (accounts for parking, setbacks, open space)
             </p>
           </CardHeader>
           <CardContent>
@@ -1147,8 +1161,31 @@ export default function AssessmentVisualizationPage({
         }
 
         const smartyData = propertyData?.smarty_data?.data;
+        const multiAddressInfo = smartyData?.multi_address;
+        const individualParcels = multiAddressInfo?.individual_parcels || [];
+
+        // Use multi_address combined data if available, otherwise fall back to lot/building
         const lotData = smartyData?.lot;
         const buildingData = smartyData?.building;
+        const combinedLotSize =
+          multiAddressInfo?.combined_lot_size_sqft || lotData?.size_sqft;
+        const combinedLotAcres = combinedLotSize
+          ? (combinedLotSize / 43560).toFixed(2)
+          : lotData?.size_acres?.toFixed(2);
+
+        // Calculate combined building size from individual parcels (includes ALL buildings regardless of demolish flag)
+        let combinedBuildingSize = 0;
+        if (individualParcels.length > 0) {
+          combinedBuildingSize = individualParcels.reduce(
+            (total: number, parcel: any) => {
+              return total + (parcel?.building?.size_sqft || 0);
+            },
+            0
+          );
+        } else {
+          combinedBuildingSize = buildingData?.size_sqft || 0;
+        }
+
         const availableBuildSpace = smartyData?.available_build_space;
         const valuationData = smartyData?.valuation;
         const financialData = smartyData?.financial;
@@ -1228,25 +1265,33 @@ export default function AssessmentVisualizationPage({
                     <div className='grid grid-cols-1 md:grid-cols-3 gap-3'>
                       <div className='bg-blue-50 rounded-lg p-3 border border-blue-200'>
                         <p className='text-xs text-gray-600 mb-1'>
-                          📐 Lot Size
+                          📐 Total Lot Size
                         </p>
                         <p className='text-xl font-bold text-blue-700'>
-                          {lotData?.size_sqft?.toLocaleString() || 'N/A'}
+                          {combinedLotSize?.toLocaleString() || 'N/A'}
                         </p>
                         <p className='text-xs text-gray-600'>
-                          sqft ({lotData?.size_acres?.toFixed(2) || 'N/A'}{' '}
-                          acres)
+                          sqft ({combinedLotAcres || 'N/A'} acres)
+                          {individualParcels.length > 0 &&
+                            ` • ${individualParcels.length} parcel${
+                              individualParcels.length > 1 ? 's' : ''
+                            }`}
                         </p>
                       </div>
                       <div className='bg-orange-50 rounded-lg p-3 border border-orange-200'>
                         <p className='text-xs text-gray-600 mb-1'>
-                          🏠 Building Size
+                          🏠{' '}
+                          {submission.property_demolish_all_structures
+                            ? 'Existing Buildings'
+                            : 'Building Size'}
                         </p>
                         <p className='text-xl font-bold text-orange-700'>
-                          {buildingData?.size_sqft?.toLocaleString() || 'N/A'}
+                          {combinedBuildingSize?.toLocaleString() || 'N/A'}
                         </p>
                         <p className='text-xs text-gray-600'>
-                          sqft ({buildingData?.year_built || 'N/A'})
+                          sqft{' '}
+                          {submission.property_demolish_all_structures &&
+                            '(to be demolished)'}
                         </p>
                       </div>
                       <div className='bg-green-50 rounded-lg p-3 border border-green-200'>
@@ -1377,7 +1422,7 @@ export default function AssessmentVisualizationPage({
                           <div className='grid grid-cols-3 gap-4 text-center'>
                             <div>
                               <p className='text-xs text-gray-600 mb-1'>
-                                Gross Equity (30%)
+                                Gross Equity (20%)
                               </p>
                               <p className='text-lg font-bold text-purple-700'>
                                 $
@@ -1444,59 +1489,143 @@ export default function AssessmentVisualizationPage({
                   )}
 
                   {/* Unit Capacity */}
-                  {submission.financial_projections.unit_capacity && (
+                  {submission.financial_projections.multi_story_scenarios && (
                     <div>
-                      <h4 className='font-semibold mb-3 text-blue-700'>
+                      <h4 className='font-semibold mb-3 text-blue-700 flex items-center gap-2'>
                         Unit Capacity Analysis
+                        {(() => {
+                          const additionalAddresses =
+                            submission.property_additional_addresses || [];
+                          const totalParcels = 1 + additionalAddresses.length;
+                          if (totalParcels > 1) {
+                            return (
+                              <span className='text-xs font-normal text-gray-600 bg-gray-100 px-2 py-1 rounded'>
+                                Based on{' '}
+                                {combinedLotSize?.toLocaleString() || 'N/A'}{' '}
+                                sqft ({totalParcels} parcels)
+                              </span>
+                            );
+                          }
+                          return null;
+                        })()}
                       </h4>
-                      <div className='grid grid-cols-2 md:grid-cols-4 gap-4'>
-                        <div className='bg-blue-50 rounded-lg p-3'>
-                          <p className='text-sm text-gray-600'>
-                            Feasible Units
-                          </p>
-                          <p className='text-2xl font-bold text-blue-600'>
-                            {
-                              submission.financial_projections.unit_capacity
-                                .feasible_units
-                            }
-                          </p>
-                        </div>
-                        <div className='bg-gray-50 rounded-lg p-3'>
-                          <p className='text-sm text-gray-600'>
-                            Studio (500 sf)
-                          </p>
-                          <p className='text-xl font-semibold'>
-                            {submission.financial_projections.unit_capacity
-                              .studio || 0}
-                          </p>
-                        </div>
-                        <div className='bg-gray-50 rounded-lg p-3'>
-                          <p className='text-sm text-gray-600'>
-                            1-Bedroom (725 sf)
-                          </p>
-                          <p className='text-xl font-semibold'>
-                            {submission.financial_projections.unit_capacity
-                              .one_bedroom || 0}
-                          </p>
-                        </div>
-                        <div className='bg-gray-50 rounded-lg p-3'>
-                          <p className='text-sm text-gray-600'>Avg Unit Size</p>
-                          <p className='text-xl font-semibold'>
-                            {submission.financial_projections.unit_capacity
-                              .avg_unit_sqft || 646}{' '}
-                            sf
-                          </p>
-                        </div>
+                      <div className='grid grid-cols-2 md:grid-cols-5 gap-4'>
+                        {(() => {
+                          // Get recommended scenario or fallback to available scenarios
+                          const scenarios =
+                            submission.financial_projections
+                              .multi_story_scenarios.scenarios;
+                          const recommended =
+                            submission.financial_projections
+                              .multi_story_scenarios.recommended;
+                          const recommendedScenario =
+                            scenarios?.[recommended] ||
+                            scenarios?.['5_story'] ||
+                            scenarios?.['4_story'] ||
+                            scenarios?.['3_story'] ||
+                            {};
+
+                          const totalUnits = recommendedScenario.units || 0;
+                          const avgUnitSize = 425; // Efficiency planning factor (gross building area per unit, ~88% efficiency)
+
+                          // Unit mix: 20% studios (325sf), 55% 1BR (450sf), 25% 2BR (675sf)
+                          const studioUnits = Math.floor(totalUnits * 0.2);
+                          const oneBedUnits = Math.floor(totalUnits * 0.55);
+                          const twoBedUnits = Math.floor(totalUnits * 0.25);
+
+                          return (
+                            <>
+                              <div className='bg-blue-50 rounded-lg p-3'>
+                                <p className='text-sm text-gray-600'>
+                                  Feasible Units
+                                </p>
+                                <p className='text-2xl font-bold text-blue-600'>
+                                  {totalUnits}
+                                </p>
+                                <p className='text-[10px] text-gray-500 mt-1'>
+                                  {recommended
+                                    ?.replace('_', '-')
+                                    .replace(/\b\w/g, (l: string) =>
+                                      l.toUpperCase()
+                                    )}{' '}
+                                  scenario
+                                </p>
+                              </div>
+                              <div className='bg-gray-50 rounded-lg p-3'>
+                                <p className='text-sm text-gray-600'>
+                                  Studio (325 sf)
+                                </p>
+                                <p className='text-xl font-semibold'>
+                                  {studioUnits}
+                                </p>
+                                <p className='text-[10px] text-gray-500 mt-1'>
+                                  20% of units
+                                </p>
+                              </div>
+                              <div className='bg-gray-50 rounded-lg p-3'>
+                                <p className='text-sm text-gray-600'>
+                                  1-Bedroom (450 sf)
+                                </p>
+                                <p className='text-xl font-semibold'>
+                                  {oneBedUnits}
+                                </p>
+                                <p className='text-[10px] text-gray-500 mt-1'>
+                                  55% of units
+                                </p>
+                              </div>
+                              <div className='bg-gray-50 rounded-lg p-3'>
+                                <p className='text-sm text-gray-600'>
+                                  2-Bedroom (675 sf)
+                                </p>
+                                <p className='text-xl font-semibold'>
+                                  {twoBedUnits}
+                                </p>
+                                <p className='text-[10px] text-gray-500 mt-1'>
+                                  25% of units
+                                </p>
+                              </div>
+                              <div className='bg-gray-50 rounded-lg p-3'>
+                                <p className='text-sm text-gray-600'>
+                                  Avg Unit Size
+                                </p>
+                                <p className='text-xl font-semibold'>
+                                  {avgUnitSize} sf
+                                </p>
+                                <p className='text-[10px] text-gray-500 mt-1'>
+                                  Planning factor (gross area)
+                                </p>
+                              </div>
+                            </>
+                          );
+                        })()}
                       </div>
-                      {submission.financial_projections.unit_capacity
-                        .feasible_units < 40 && (
-                        <div className='mt-3 bg-red-100 border border-red-300 rounded-lg p-3'>
-                          <p className='text-sm text-red-800 font-medium'>
-                            ⚠️ Below minimum threshold: Logos requires 40+ units
-                            for financial viability
-                          </p>
-                        </div>
-                      )}
+                      {(() => {
+                        // Check if feasible units meet minimum threshold
+                        const scenarios =
+                          submission.financial_projections.multi_story_scenarios
+                            .scenarios;
+                        const recommended =
+                          submission.financial_projections.multi_story_scenarios
+                            .recommended;
+                        const recommendedScenario =
+                          scenarios?.[recommended] ||
+                          scenarios?.['5_story'] ||
+                          scenarios?.['4_story'] ||
+                          scenarios?.['3_story'] ||
+                          {};
+                        const totalUnits = recommendedScenario.units || 0;
+
+                        return (
+                          totalUnits < 40 && (
+                            <div className='mt-3 bg-red-100 border border-red-300 rounded-lg p-3'>
+                              <p className='text-sm text-red-800 font-medium'>
+                                ⚠️ Below minimum threshold: Logos requires 40+
+                                units for financial viability
+                              </p>
+                            </div>
+                          )
+                        );
+                      })()}
                     </div>
                   )}
 
@@ -1888,7 +2017,7 @@ export default function AssessmentVisualizationPage({
                     </div>
                     <div className='bg-purple-50 rounded-lg p-4 border border-purple-200'>
                       <p className='text-sm text-gray-600 mb-1'>Land Use</p>
-                      <p className='text-2xl font-bold text-purple-700'>
+                      <p className='text-base font-bold text-purple-700 break-words'>
                         {propertyTypeData.land_use || 'N/A'}
                       </p>
                       <p className='text-xs text-gray-600 mt-1'>
@@ -1926,71 +2055,6 @@ export default function AssessmentVisualizationPage({
                         </div>
                       </div>
                     )}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Building Details */}
-            {buildingData && (
-              <Card className='mb-6'>
-                <CardHeader>
-                  <CardTitle className='flex items-center gap-2'>
-                    <Building2 className='h-5 w-5' />
-                    🏗️ Building Structure & Details
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className='grid grid-cols-2 md:grid-cols-4 gap-4'>
-                    <div className='bg-gray-50 rounded-lg p-3 border border-gray-200'>
-                      <p className='text-sm text-gray-600'>Total Size</p>
-                      <p className='text-xl font-bold text-gray-900'>
-                        {buildingData.size_sqft?.toLocaleString()} sqft
-                      </p>
-                    </div>
-                    <div className='bg-gray-50 rounded-lg p-3 border border-gray-200'>
-                      <p className='text-sm text-gray-600'>Year Built</p>
-                      <p className='text-xl font-bold text-gray-900'>
-                        {buildingData.year_built || 'N/A'}
-                      </p>
-                    </div>
-                    <div className='bg-gray-50 rounded-lg p-3 border border-gray-200'>
-                      <p className='text-sm text-gray-600'>Stories</p>
-                      <p className='text-xl font-bold text-gray-900'>
-                        {buildingData.stories || 'N/A'}
-                      </p>
-                    </div>
-                    <div className='bg-gray-50 rounded-lg p-3 border border-gray-200'>
-                      <p className='text-sm text-gray-600'>Construction</p>
-                      <p className='text-xl font-bold text-gray-900'>
-                        {buildingData.construction_type || 'N/A'}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Floor breakdown if available */}
-                  {(buildingData['1st_floor_sqft'] ||
-                    buildingData['2nd_floor_sqft']) && (
-                    <div className='mt-4 grid grid-cols-2 gap-4'>
-                      {buildingData['1st_floor_sqft'] && (
-                        <div className='bg-blue-50 rounded-lg p-3 border border-blue-200'>
-                          <p className='text-sm text-gray-600'>1st Floor</p>
-                          <p className='text-lg font-bold text-blue-700'>
-                            {buildingData['1st_floor_sqft']?.toLocaleString()}{' '}
-                            sqft
-                          </p>
-                        </div>
-                      )}
-                      {buildingData['2nd_floor_sqft'] > 0 && (
-                        <div className='bg-indigo-50 rounded-lg p-3 border border-indigo-200'>
-                          <p className='text-sm text-gray-600'>2nd Floor</p>
-                          <p className='text-lg font-bold text-indigo-700'>
-                            {buildingData['2nd_floor_sqft']?.toLocaleString()}{' '}
-                            sqft
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </CardContent>
               </Card>
             )}
@@ -2058,474 +2122,125 @@ export default function AssessmentVisualizationPage({
         );
       })()}
 
-      {/* Property Overview */}
-      <Card className='mb-6'>
-        <CardHeader>
-          <CardTitle className='flex items-center gap-2'>
-            <Building2 className='h-5 w-5' />
-            Property Overview
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
-            <div className='space-y-3'>
-              <div>
-                <p className='text-sm text-gray-600'>Street Address</p>
-                <p className='font-semibold'>
-                  {submission.property_street_address || 'N/A'}
-                </p>
-              </div>
-              <div>
-                <p className='text-sm text-gray-600'>City, State, ZIP</p>
-                <p className='font-semibold'>
-                  {submission.property_city && submission.property_state
-                    ? `${submission.property_city}, ${
-                        submission.property_state
-                      } ${submission.property_zip_code || ''}`
-                    : 'N/A'}
-                </p>
-              </div>
-              <div>
-                <p className='text-sm text-gray-600'>County</p>
-                <p className='font-semibold'>
-                  {submission.property_county || 'N/A'}
-                </p>
-              </div>
-              <div>
-                <p className='text-sm text-gray-600'>Coordinates</p>
-                <p className='font-semibold'>
-                  {submission.property_latitude && submission.property_longitude
-                    ? `${submission.property_latitude.toFixed(
-                        6
-                      )}, ${submission.property_longitude.toFixed(6)}`
-                    : 'N/A'}
-                </p>
-              </div>
-            </div>
-            <div className='space-y-3'>
-              <div>
-                <p className='text-sm text-gray-600'>Lot Size</p>
-                <p className='font-semibold'>
-                  {submission.property_lot_size_sqft
-                    ? `${submission.property_lot_size_sqft.toLocaleString()} sq ft (${
-                        submission.property_lot_size_acres?.toFixed(2) ||
-                        (submission.property_lot_size_sqft / 43560).toFixed(2)
-                      } acres)`
-                    : 'N/A'}
-                </p>
-              </div>
-              <div>
-                <p className='text-sm text-gray-600'>Zoning</p>
-                <p className='font-semibold'>
-                  {submission.property_zoning_description ||
-                    submission.property_zoning_classification ||
-                    'N/A'}
-                </p>
-              </div>
-              <div>
-                <p className='text-sm text-gray-600'>Current Use</p>
-                <p className='font-semibold'>
-                  {submission.property_current_usage || 'N/A'}
-                </p>
-              </div>
-              <div>
-                <p className='text-sm text-gray-600'>Assessed Value</p>
-                <p className='font-semibold'>
-                  {submission.property_assessed_value
-                    ? `$${submission.property_assessed_value.toLocaleString()}`
-                    : 'N/A'}
-                </p>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Financial Projections - MOVED UP (now appears after Available Build Space) */}
-
-      {/* Comprehensive Market Analysis */}
-      {submission.market_analysis && (
+      {/* HUD Fair Market Rent Data */}
+      {submission.market_analysis?.fair_market_rent && (
         <Card className='mb-6'>
           <CardHeader>
             <CardTitle className='flex items-center gap-2'>
               <TrendingUp className='h-5 w-5' />
-              Market Analysis & Demographics
+              HUD Fair Market Rent (Section 8)
             </CardTitle>
           </CardHeader>
-          <CardContent className='space-y-6'>
-            {/* PLACEHOLDER - Market content starts here */}
-            {submission.financial_projections.unit_capacity && (
-              <div>
-                <h4 className='font-semibold mb-3 text-blue-700'>
-                  Unit Capacity Analysis
-                </h4>
-                <div className='grid grid-cols-2 md:grid-cols-4 gap-4'>
-                  <div className='bg-blue-50 rounded-lg p-3'>
-                    <p className='text-sm text-gray-600'>Feasible Units</p>
-                    <p className='text-2xl font-bold text-blue-600'>
-                      {
-                        submission.financial_projections.unit_capacity
-                          .feasible_units
-                      }
-                    </p>
-                  </div>
-                  <div className='bg-gray-50 rounded-lg p-3'>
-                    <p className='text-sm text-gray-600'>Studio (400 sf)</p>
-                    <p className='text-xl font-semibold'>
-                      {submission.financial_projections.unit_capacity.studio ||
-                        0}
-                    </p>
-                  </div>
-                  <div className='bg-gray-50 rounded-lg p-3'>
-                    <p className='text-sm text-gray-600'>1-Bedroom (650 sf)</p>
-                    <p className='text-xl font-semibold'>
-                      {submission.financial_projections.unit_capacity
-                        .one_bedroom || 0}
-                    </p>
-                  </div>
-                  <div className='bg-gray-50 rounded-lg p-3'>
-                    <p className='text-sm text-gray-600'>2-Bedroom (850 sf)</p>
-                    <p className='text-xl font-semibold'>
-                      {submission.financial_projections.unit_capacity
-                        .two_bedroom || 0}
-                    </p>
-                  </div>
-                </div>
-                {submission.financial_projections.unit_capacity.feasible_units <
-                  40 && (
-                  <div className='mt-3 bg-red-100 border border-red-300 rounded-lg p-3'>
-                    <p className='text-sm text-red-800 font-medium'>
-                      ⚠️ Below minimum threshold: Logos requires 40+ units for
-                      financial viability
-                    </p>
-                  </div>
-                )}
+          <CardContent>
+            <div className='grid grid-cols-2 md:grid-cols-5 gap-3'>
+              <div className='bg-blue-50 rounded-lg p-3 text-center'>
+                <p className='text-xs text-gray-600'>Studio</p>
+                <p className='text-lg font-bold text-blue-600'>
+                  $
+                  {submission.market_analysis.fair_market_rent.studio?.toLocaleString() ||
+                    'N/A'}
+                </p>
+                <p className='text-xs text-gray-500'>per month</p>
               </div>
-            )}
-
-            {/* Development Costs */}
-            {submission.financial_projections.total_development_cost && (
-              <div>
-                <h4 className='font-semibold mb-3 text-blue-700'>
-                  Development Cost Breakdown
-                </h4>
-                <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'>
-                  <div className='bg-gray-50 rounded-lg p-3'>
-                    <p className='text-sm text-gray-600'>
-                      Total Development Cost
-                    </p>
-                    <p className='text-xl font-bold text-blue-600'>
-                      $
-                      {submission.financial_projections.total_development_cost.toLocaleString()}
-                    </p>
-                  </div>
-                  <div className='bg-gray-50 rounded-lg p-3'>
-                    <p className='text-sm text-gray-600'>Cost Per Unit</p>
-                    <p className='text-xl font-bold text-blue-600'>
-                      $
-                      {submission.financial_projections.adjusted_cost_per_unit?.toLocaleString() ||
-                        'N/A'}
-                    </p>
-                    <p className='text-xs text-gray-500 mt-1'>
-                      Target: ≤$325,000/unit
-                    </p>
-                  </div>
-                  <div className='bg-gray-50 rounded-lg p-3'>
-                    <p className='text-sm text-gray-600'>Land Acquisition</p>
-                    <p className='text-lg font-semibold'>
-                      $
-                      {submission.financial_projections.land_acquisition_cost?.toLocaleString() ||
-                        'N/A'}
-                    </p>
-                  </div>
-                  <div className='bg-gray-50 rounded-lg p-3'>
-                    <p className='text-sm text-gray-600'>Construction Cost</p>
-                    <p className='text-lg font-semibold'>
-                      $
-                      {submission.financial_projections.construction_cost?.toLocaleString() ||
-                        'N/A'}
-                    </p>
-                  </div>
-                  <div className='bg-gray-50 rounded-lg p-3'>
-                    <p className='text-sm text-gray-600'>Soft Costs (15%)</p>
-                    <p className='text-lg font-semibold'>
-                      $
-                      {submission.financial_projections.soft_costs?.toLocaleString() ||
-                        'N/A'}
-                    </p>
-                  </div>
-                  <div className='bg-gray-50 rounded-lg p-3'>
-                    <p className='text-sm text-gray-600'>Contingency (10%)</p>
-                    <p className='text-lg font-semibold'>
-                      $
-                      {submission.financial_projections.contingency?.toLocaleString() ||
-                        'N/A'}
-                    </p>
-                  </div>
-                </div>
+              <div className='bg-blue-50 rounded-lg p-3 text-center'>
+                <p className='text-xs text-gray-600'>1-Bedroom</p>
+                <p className='text-lg font-bold text-blue-600'>
+                  $
+                  {submission.market_analysis.fair_market_rent.one_bedroom?.toLocaleString() ||
+                    'N/A'}
+                </p>
+                <p className='text-xs text-gray-500'>per month</p>
               </div>
-            )}
-
-            {/* Revenue Projections */}
-            {submission.financial_projections.revenue_projections && (
-              <div>
-                <h4 className='font-semibold mb-3 text-green-700'>
-                  Revenue & Returns
-                </h4>
-                <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4'>
-                  <div className='bg-green-50 rounded-lg p-3'>
-                    <p className='text-sm text-gray-600'>Annual Revenue</p>
-                    <p className='text-xl font-bold text-green-600'>
-                      $
-                      {submission.financial_projections.revenue_projections.total_annual_revenue?.toLocaleString() ||
-                        'N/A'}
-                    </p>
-                  </div>
-                  <div className='bg-yellow-50 rounded-lg p-3'>
-                    <p className='text-sm text-gray-600'>Operating Expenses</p>
-                    <p className='text-xl font-bold text-yellow-600'>
-                      $
-                      {submission.financial_projections.revenue_projections.operating_expenses?.toLocaleString() ||
-                        'N/A'}
-                    </p>
-                  </div>
-                  <div className='bg-blue-50 rounded-lg p-3'>
-                    <p className='text-sm text-gray-600'>
-                      Net Operating Income
-                    </p>
-                    <p className='text-xl font-bold text-blue-600'>
-                      $
-                      {submission.financial_projections.revenue_projections.net_operating_income?.toLocaleString() ||
-                        'N/A'}
-                    </p>
-                  </div>
-                  <div className='bg-purple-50 rounded-lg p-3'>
-                    <p className='text-sm text-gray-600'>ROI</p>
-                    <p className='text-xl font-bold text-purple-600'>
-                      {submission.financial_projections.revenue_projections
-                        .roi_percent || 'N/A'}
-                      %
-                    </p>
-                  </div>
-                </div>
-
-                {/* Additional Metrics */}
-                <div className='mt-4 grid grid-cols-2 md:grid-cols-4 gap-3'>
-                  <div
-                    className={`rounded p-2 text-center ${
-                      submission.financial_projections.revenue_projections
-                        .irr_percent >= 20
-                        ? 'bg-green-50 border border-green-200'
-                        : submission.financial_projections.revenue_projections
-                            .irr_percent >= 15
-                        ? 'bg-yellow-50 border border-yellow-200'
-                        : 'bg-gray-50'
-                    }`}
-                  >
-                    <p className='text-xs text-gray-600'>
-                      IRR (10-yr){' '}
-                      {submission.financial_projections.revenue_projections
-                        .irr_percent >= 20
-                        ? '✓'
-                        : ''}
-                    </p>
-                    <p
-                      className={`font-bold text-sm ${
-                        submission.financial_projections.revenue_projections
-                          .irr_percent >= 20
-                          ? 'text-green-700'
-                          : submission.financial_projections.revenue_projections
-                              .irr_percent >= 15
-                          ? 'text-yellow-700'
-                          : 'text-gray-900'
-                      }`}
-                    >
-                      {submission.financial_projections.revenue_projections
-                        .irr_percent !== undefined &&
-                      submission.financial_projections.revenue_projections
-                        .irr_percent !== null
-                        ? `${submission.financial_projections.revenue_projections.irr_percent.toFixed(
-                            2
-                          )}%`
-                        : 'N/A'}
-                    </p>
-                    {submission.financial_projections.revenue_projections
-                      .irr_percent !== undefined &&
-                      submission.financial_projections.revenue_projections
-                        .irr_percent !== null && (
-                        <p className='text-[10px] text-gray-500 mt-0.5'>
-                          Target: 20%
-                        </p>
-                      )}
-                  </div>
-                  <div className='bg-gray-50 rounded p-2 text-center'>
-                    <p className='text-xs text-gray-600'>Yield on Cost</p>
-                    <p className='font-bold text-sm'>
-                      {submission.financial_projections.revenue_projections
-                        .yield_on_cost !== undefined &&
-                      submission.financial_projections.revenue_projections
-                        .yield_on_cost !== null
-                        ? `${submission.financial_projections.revenue_projections.yield_on_cost.toFixed(
-                            2
-                          )}%`
-                        : submission.financial_projections.revenue_projections
-                            .cap_rate !== undefined &&
-                          submission.financial_projections.revenue_projections
-                            .cap_rate !== null
-                        ? `${submission.financial_projections.revenue_projections.cap_rate.toFixed(
-                            2
-                          )}%`
-                        : 'N/A'}
-                    </p>
-                    <p className='text-[10px] text-gray-500 mt-0.5'>
-                      Target: 7%
-                    </p>
-                  </div>
-                  <div className='bg-gray-50 rounded p-2 text-center'>
-                    <p className='text-xs text-gray-600'>Cash-on-Cash Return</p>
-                    <p className='font-bold text-sm'>
-                      {submission.financial_projections.revenue_projections
-                        .cash_on_cash_return !== undefined &&
-                      submission.financial_projections.revenue_projections
-                        .cash_on_cash_return !== null
-                        ? `${submission.financial_projections.revenue_projections.cash_on_cash_return.toFixed(
-                            2
-                          )}%`
-                        : 'N/A'}
-                    </p>
-                  </div>
-                  <div className='bg-gray-50 rounded p-2 text-center'>
-                    <p className='text-xs text-gray-600'>Equity Investment</p>
-                    <p className='font-bold text-sm'>
-                      {submission.financial_projections.revenue_projections
-                        .equity_investment_30pct
-                        ? `$${submission.financial_projections.revenue_projections.equity_investment_30pct.toLocaleString()}`
-                        : 'N/A'}
-                    </p>
-                  </div>
-                  <div className='bg-gray-50 rounded p-2 text-center'>
-                    <p className='text-xs text-gray-600'>
-                      Operating Expense Ratio
-                    </p>
-                    <p className='font-bold text-sm'>
-                      {submission.financial_projections.revenue_projections
-                        .operating_expense_ratio || '42%'}
-                    </p>
-                  </div>
-                </div>
+              <div className='bg-blue-50 rounded-lg p-3 text-center'>
+                <p className='text-xs text-gray-600'>2-Bedroom</p>
+                <p className='text-lg font-bold text-blue-600'>
+                  $
+                  {submission.market_analysis.fair_market_rent.two_bedroom?.toLocaleString() ||
+                    'N/A'}
+                </p>
+                <p className='text-xs text-gray-500'>per month</p>
               </div>
-            )}
-
-            {/* Assumptions */}
-            {submission.financial_projections.assumptions && (
-              <div>
-                <h4 className='font-semibold mb-3 text-gray-700'>
-                  Key Assumptions
-                </h4>
-                <div className='bg-gray-50 rounded-lg p-4'>
-                  <div className='grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2 text-sm'>
-                    {Object.entries(
-                      submission.financial_projections.assumptions
-                    ).map(([key, value]) => (
-                      <div key={key} className='flex justify-between'>
-                        <span className='text-gray-600'>
-                          {key
-                            .replace(/_/g, ' ')
-                            .replace(/\b\w/g, (l) => l.toUpperCase())}
-                          :
-                        </span>
-                        <span className='font-semibold'>{String(value)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+              <div className='bg-blue-50 rounded-lg p-3 text-center'>
+                <p className='text-xs text-gray-600'>3-Bedroom</p>
+                <p className='text-lg font-bold text-blue-600'>
+                  $
+                  {submission.market_analysis.fair_market_rent.three_bedroom?.toLocaleString() ||
+                    'N/A'}
+                </p>
+                <p className='text-xs text-gray-500'>per month</p>
               </div>
-            )}
+              <div className='bg-blue-50 rounded-lg p-3 text-center'>
+                <p className='text-xs text-gray-600'>4-Bedroom</p>
+                <p className='text-lg font-bold text-blue-600'>
+                  $
+                  {submission.market_analysis.fair_market_rent.four_bedroom?.toLocaleString() ||
+                    'N/A'}
+                </p>
+                <p className='text-xs text-gray-500'>per month</p>
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Comprehensive Market Analysis */}
-      {submission.market_analysis && (
+      {/* AMI Limits */}
+      {submission.market_analysis?.ami_limits && (
         <Card className='mb-6'>
           <CardHeader>
             <CardTitle className='flex items-center gap-2'>
               <TrendingUp className='h-5 w-5' />
-              Market Analysis & Demographics
+              Area Median Income (AMI) Limits
             </CardTitle>
           </CardHeader>
-          <CardContent className='space-y-6'>
-            {/* AI-Generated Market Analysis */}
-            {submission.market_analysis.analysis && (
-              <div>
-                <h4 className='font-semibold mb-3 text-green-700'>
-                  Market Assessment
-                </h4>
-                <div className='bg-green-50 border border-green-200 rounded-lg p-4'>
-                  <p className='text-gray-800 whitespace-pre-line leading-relaxed'>
-                    {submission.market_analysis.analysis}
-                  </p>
-                </div>
+          <CardContent>
+            <div className='grid grid-cols-2 md:grid-cols-4 gap-3'>
+              <div className='bg-purple-50 rounded p-3 text-center'>
+                <p className='text-xs text-gray-600'>50% AMI (2-person)</p>
+                <p className='text-sm font-bold text-purple-600'>
+                  $
+                  {submission.market_analysis.ami_limits.ami_50_percent_2person?.toLocaleString() ||
+                    'N/A'}
+                </p>
               </div>
-            )}
-
-            {/* HUD Fair Market Rent Data */}
-            {submission.market_analysis.fair_market_rent && (
-              <div>
-                <h4 className='font-semibold mb-3 text-blue-700'>
-                  HUD Fair Market Rent (Section 8)
-                </h4>
-                <div className='grid grid-cols-2 md:grid-cols-5 gap-3'>
-                  <div className='bg-blue-50 rounded-lg p-3 text-center'>
-                    <p className='text-xs text-gray-600'>Studio</p>
-                    <p className='text-lg font-bold text-blue-600'>
-                      $
-                      {submission.market_analysis.fair_market_rent.studio?.toLocaleString() ||
-                        'N/A'}
-                    </p>
-                    <p className='text-xs text-gray-500'>per month</p>
-                  </div>
-                  <div className='bg-blue-50 rounded-lg p-3 text-center'>
-                    <p className='text-xs text-gray-600'>1-Bedroom</p>
-                    <p className='text-lg font-bold text-blue-600'>
-                      $
-                      {submission.market_analysis.fair_market_rent.one_bedroom?.toLocaleString() ||
-                        'N/A'}
-                    </p>
-                    <p className='text-xs text-gray-500'>per month</p>
-                  </div>
-                  <div className='bg-blue-50 rounded-lg p-3 text-center'>
-                    <p className='text-xs text-gray-600'>2-Bedroom</p>
-                    <p className='text-lg font-bold text-blue-600'>
-                      $
-                      {submission.market_analysis.fair_market_rent.two_bedroom?.toLocaleString() ||
-                        'N/A'}
-                    </p>
-                    <p className='text-xs text-gray-500'>per month</p>
-                  </div>
-                  <div className='bg-blue-50 rounded-lg p-3 text-center'>
-                    <p className='text-xs text-gray-600'>3-Bedroom</p>
-                    <p className='text-lg font-bold text-blue-600'>
-                      $
-                      {submission.market_analysis.fair_market_rent.three_bedroom?.toLocaleString() ||
-                        'N/A'}
-                    </p>
-                    <p className='text-xs text-gray-500'>per month</p>
-                  </div>
-                  <div className='bg-blue-50 rounded-lg p-3 text-center'>
-                    <p className='text-xs text-gray-600'>4-Bedroom</p>
-                    <p className='text-lg font-bold text-blue-600'>
-                      $
-                      {submission.market_analysis.fair_market_rent.four_bedroom?.toLocaleString() ||
-                        'N/A'}
-                    </p>
-                    <p className='text-xs text-gray-500'>per month</p>
-                  </div>
-                </div>
+              <div className='bg-purple-50 rounded p-3 text-center'>
+                <p className='text-xs text-gray-600'>60% AMI (2-person)</p>
+                <p className='text-sm font-bold text-purple-600'>
+                  $
+                  {submission.market_analysis.ami_limits.ami_60_percent_2person?.toLocaleString() ||
+                    'N/A'}
+                </p>
               </div>
-            )}
+              <div className='bg-purple-50 rounded p-3 text-center'>
+                <p className='text-xs text-gray-600'>80% AMI (2-person)</p>
+                <p className='text-sm font-bold text-purple-600'>
+                  $
+                  {submission.market_analysis.ami_limits.ami_80_percent_2person?.toLocaleString() ||
+                    'N/A'}
+                </p>
+              </div>
+              <div className='bg-purple-50 rounded p-3 text-center'>
+                <p className='text-xs text-gray-600'>100% AMI (2-person)</p>
+                <p className='text-sm font-bold text-purple-600'>
+                  $
+                  {submission.market_analysis.ami_limits.ami_100_percent_2person?.toLocaleString() ||
+                    'N/A'}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-            {/* AMI Limits */}
+      {/* Census Demographics */}
+      {submission.market_analysis?.census_data && (
+        <Card className='mb-6'>
+          <CardHeader>
+            <CardTitle className='flex items-center gap-2'>
+              <TrendingUp className='h-5 w-5' />
+              Demographics (Census Data)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
             {submission.market_analysis.ami_limits && (
               <div>
                 <h4 className='font-semibold mb-3 text-purple-700'>
