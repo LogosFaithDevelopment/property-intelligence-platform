@@ -30,6 +30,7 @@ import {
   ThumbsDown,
 } from 'lucide-react';
 import Link from 'next/link';
+import { toast } from 'sonner';
 
 interface SubmissionDetail {
   id: number;
@@ -212,14 +213,63 @@ export default function AssessmentVisualizationPage({
             )}
           </div>
         </div>
-        <div className='text-right'>
-          <div className={`text-5xl font-bold ${getStatusColor(score)}`}>
-            {grade}
+        <div className='flex items-center gap-4'>
+          <Button
+            onClick={async () => {
+              try {
+                toast.loading('Generating report...', {
+                  id: 'download-report',
+                });
+                const token = await getToken();
+                const response = await fetch(
+                  `http://localhost:8000/api/v1/reports/assessment/${id}/download-v2`,
+                  {
+                    headers: {
+                      Authorization: `Bearer ${token}`,
+                    },
+                  }
+                );
+
+                if (response.ok) {
+                  const blob = await response.blob();
+                  const url = window.URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `Logos_Assessment_${id}.pdf`;
+                  document.body.appendChild(a);
+                  a.click();
+                  window.URL.revokeObjectURL(url);
+                  document.body.removeChild(a);
+                  toast.success('Report downloaded successfully!', {
+                    id: 'download-report',
+                  });
+                } else {
+                  const errorText = await response.text();
+                  console.error('Download error:', errorText);
+                  toast.error('Failed to download report. Please try again.', {
+                    id: 'download-report',
+                  });
+                }
+              } catch (error) {
+                console.error('Download error:', error);
+                toast.error('Failed to download report. Please try again.', {
+                  id: 'download-report',
+                });
+              }
+            }}
+            className='bg-gradient-to-r from-yellow-500 to-yellow-700 hover:from-yellow-600 hover:to-yellow-800'
+          >
+            Download Report
+          </Button>
+          <div className='text-right'>
+            <div className={`text-5xl font-bold ${getStatusColor(score)}`}>
+              {grade}
+            </div>
+            <div className='text-2xl font-semibold text-gray-700'>
+              {score.toFixed(1)}/100
+            </div>
+            <div className='text-xs text-gray-500 mt-1'>Overall Score</div>
           </div>
-          <div className='text-2xl font-semibold text-gray-700'>
-            {score.toFixed(1)}/100
-          </div>
-          <div className='text-xs text-gray-500 mt-1'>Overall Score</div>
         </div>
       </div>
 
