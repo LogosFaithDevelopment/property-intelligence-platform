@@ -7,17 +7,12 @@
 'use client';
 
 import { useRequireAdmin } from '@/hooks/useAdminAuth';
-import { useUser } from '@clerk/nextjs';
+import { useClerk, useUser } from '@clerk/nextjs';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
-import {
-  LayoutDashboard,
-  FileText,
-  Users,
-  LogOut,
-  Building2,
-} from 'lucide-react';
+import { LayoutDashboard, FileText, Users, LogOut } from 'lucide-react';
 
 export default function AdminLayout({
   children,
@@ -26,6 +21,7 @@ export default function AdminLayout({
 }) {
   const { isAdmin, isLoading } = useRequireAdmin();
   const { user } = useUser();
+  const { signOut } = useClerk();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -72,11 +68,21 @@ export default function AdminLayout({
           <div className='p-6'>
             {/* Logo */}
             <Link href='/admin/dashboard'>
-              <div className='flex items-center gap-2 mb-8 cursor-pointer hover:opacity-80'>
-                <Building2 className='h-8 w-8 text-blue-600' />
-                <div>
-                  <div className='font-bold text-lg'>Logos Admin</div>
-                  <div className='text-xs text-gray-500'>
+              <div className='flex items-center gap-1.5 mb-8 cursor-pointer hover:opacity-80'>
+                <div className='w-14 h-14 flex-shrink-0'>
+                  <Image
+                    src='/logos-icon.png'
+                    alt='Logos Development'
+                    width={56}
+                    height={56}
+                    className='object-contain w-full h-full'
+                  />
+                </div>
+                <div className='flex flex-col gap-0'>
+                  <div className='font-bold text-lg font-[family-name:var(--font-safe-light-accent)] leading-none'>
+                    Logos Admin
+                  </div>
+                  <div className='text-xs text-gray-500 leading-none -mt-0.5'>
                     Property Management
                   </div>
                 </div>
@@ -131,7 +137,11 @@ export default function AdminLayout({
             variant='outline'
             size='sm'
             className='w-full'
-            onClick={() => router.push('/sign-out')}
+            onClick={() =>
+              signOut(() => {
+                window.location.href = '/';
+              })
+            }
           >
             <LogOut className='h-4 w-4 mr-2' />
             Sign Out
@@ -140,7 +150,7 @@ export default function AdminLayout({
       </aside>
 
       {/* Main content - With left margin to account for fixed sidebar */}
-      <main className='ml-64 flex-1 p-8'>{children}</main>
+      <main className='ml-64 flex-1 pl-16 pr-12 py-12'>{children}</main>
     </div>
   );
 }
