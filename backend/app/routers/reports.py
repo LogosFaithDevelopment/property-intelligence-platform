@@ -373,3 +373,68 @@ async def generate_pdf_report(
             status_code=500,
             detail=f"Failed to generate report: {str(e)}"
         )
+
+
+@router.get("/assessment/{assessment_id}/download-v2")
+async def download_assessment_report_v2(
+    assessment_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Download professional 3-page assessment report (V2 Generator)
+    Generates and streams PDF directly without saving to database
+    """
+    try:
+        # Verify assessment exists
+        stmt = select(Assessment).where(Assessment.id == assessment_id)
+        result = await db.execute(stmt)
+        assessment = result.scalar_one_or_none()
+        
+        if not assessment:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Assessment {assessment_id} not found"
+            )
+        
+        # Import V2 generator
+        # Get synchronous session for report generator
+        from app.database import SyncSessionLocal
+        from app.services.report_generator_v2 import ReportGeneratorV2
+        sync_db = SyncSessionLocal()
+        
+        try:
+            # Generate PDF using V2 generator
+            generator = ReportGeneratorV2(sync_db)
+            pdf_bytes = await generator.generate_assessment_report(assessment_id)
+            
+            # Generate filename with property address
+            from app.models.property import Property
+            property_obj = sync_db.query(Property).filter(Property.id == assessment.property_id).first()
+            
+            if property_obj and property_obj.street_address:
+                safe_address = property_obj.street_address.replace(' ', '_').replace(',', '')
+                filename = f"Logos_Assessment_{safe_address}.pdf"
+            else:
+                filename = f"Logos_Assessment_{assessment_id}.pdf"
+            
+            # Return PDF as download
+            return Response(
+                content=pdf_bytes,
+                media_type="application/pdf",
+                headers={
+                    "Content-Disposition": f"attachment; filename={filename}",
+                    "Content-Length": str(len(pdf_bytes))
+                }
+            )
+            
+        finally:
+            sync_db.close()
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating V2 PDF report: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate report: {str(e)}"
+        )
