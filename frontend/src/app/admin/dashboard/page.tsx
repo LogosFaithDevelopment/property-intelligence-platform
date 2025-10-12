@@ -106,7 +106,9 @@ export default function AdminDashboard() {
     <div className='max-w-7xl mx-auto'>
       {/* Header */}
       <div className='mb-8'>
-        <h1 className='text-3xl font-bold mb-2'>Dashboard</h1>
+        <h1 className='text-3xl font-bold mb-2 font-[family-name:var(--font-safe-light-accent)]'>
+          Dashboard
+        </h1>
         <p className='text-gray-600'>
           Welcome back! Here's an overview of property submissions.
         </p>
@@ -250,11 +252,12 @@ export default function AdminDashboard() {
               </Link>
             </div>
           ) : (
-            <div className='space-y-4'>
+            <div className='space-y-3'>
               {recentSubmissions.map((submission) => (
                 <Link
                   key={submission.id}
                   href={`/admin/submissions/${submission.id}`}
+                  className='block mb-3'
                 >
                   <div className='flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors cursor-pointer'>
                     <div className='flex-1'>
