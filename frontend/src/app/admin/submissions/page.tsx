@@ -134,10 +134,12 @@ export default function AdminSubmissionsPage() {
   }
 
   return (
-    <div className='max-w-7xl mx-auto'>
+    <div className='max-w-7xl'>
       {/* Header */}
       <div className='mb-8'>
-        <h1 className='text-3xl font-bold mb-2'>Property Submissions</h1>
+        <h1 className='text-3xl font-bold mb-2 font-[family-name:var(--font-safe-light-accent)]'>
+          Property Submissions
+        </h1>
         <p className='text-gray-600'>
           Review and manage all church property submissions
         </p>
