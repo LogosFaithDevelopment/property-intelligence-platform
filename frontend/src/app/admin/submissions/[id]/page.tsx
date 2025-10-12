@@ -317,7 +317,9 @@ export default function AdminSubmissionDetailPage({
             </Button>
           </Link>
           <div>
-            <h1 className='text-3xl font-bold'>{submission.church_name}</h1>
+            <h1 className='text-3xl font-bold font-[family-name:var(--font-safe-light-accent)]'>
+              {submission.church_name}
+            </h1>
             <p className='text-gray-600'>Submission ID: {submission.id}</p>
             {submission.property_street_address && (
               <p className='text-sm text-gray-500'>
@@ -345,11 +347,11 @@ export default function AdminSubmissionDetailPage({
       </div>
 
       {/* Quick Actions - AI Assessment Visualization */}
-      <div className='mb-6'>
-        <Link href={`/admin/submissions/${id}/assessment`}>
+      <div className='mb-6 flex gap-3'>
+        <Link href={`/admin/submissions/${id}/assessment`} className='flex-1'>
           <Button
             variant='default'
-            className='w-full py-6 text-lg bg-blue-600 hover:bg-blue-700'
+            className='w-full py-6 text-lg bg-black hover:bg-gray-800'
             disabled={!submission.overall_score}
           >
             <TrendingUp className='h-5 w-5 mr-2' />
@@ -358,6 +360,54 @@ export default function AdminSubmissionDetailPage({
               : 'AI Assessment Pending (Processing...)'}
           </Button>
         </Link>
+        <Button
+          onClick={async () => {
+            try {
+              toast.loading('Generating report...', { id: 'download-report' });
+
+              const token = await getToken();
+              const response = await fetch(
+                `http://localhost:8000/api/v1/reports/assessment/${id}/download-v2`,
+                {
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                  },
+                }
+              );
+
+              if (response.ok) {
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `Logos_Assessment_${id}.pdf`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+
+                toast.success('Report downloaded successfully!', {
+                  id: 'download-report',
+                });
+              } else {
+                const errorText = await response.text();
+                console.error('Download error:', errorText);
+                toast.error('Failed to download report. Please try again.', {
+                  id: 'download-report',
+                });
+              }
+            } catch (error) {
+              console.error('Unexpected error:', error);
+              toast.error('Failed to download report. Please try again.', {
+                id: 'download-report',
+              });
+            }
+          }}
+          className='py-6 px-8 text-lg bg-gradient-to-r from-yellow-500 to-yellow-700 hover:from-yellow-600 hover:to-yellow-800'
+          disabled={!submission.overall_score}
+        >
+          Download Report
+        </Button>
       </div>
 
       {/* Action Buttons */}
