@@ -1,16 +1,17 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
-  Building2,
   CheckCircle,
   TrendingUp,
   Home,
   DollarSign,
+  Building2,
 } from 'lucide-react';
 
 export default function HomePage() {
@@ -23,15 +24,18 @@ export default function HomePage() {
 
       <div className='min-h-screen bg-gradient-to-b from-blue-50 to-white'>
         {/* Hero Section */}
-        <div className='container mx-auto px-4 py-16'>
-          <nav className='flex justify-between items-center mb-16'>
-            <div className='flex items-center gap-2'>
-              <Building2 className='h-8 w-8 text-blue-600' />
-              <span className='text-2xl font-bold'>
-                Logos Faith Development
-              </span>
+        <div className='container mx-auto px-4 py-8'>
+          <nav className='flex justify-between items-center mb-8'>
+            <div className='flex-1 flex justify-center'>
+              <Image
+                src='/home-logos.png'
+                alt='Logos Faith Development'
+                width={200}
+                height={65}
+                className='object-contain'
+              />
             </div>
-            <div className='flex gap-4'>
+            <div className='flex gap-4 absolute right-8'>
               {isLoaded && (
                 <>
                   {isSignedIn ? (
@@ -39,14 +43,9 @@ export default function HomePage() {
                       Submit Property
                     </Button>
                   ) : (
-                    <>
-                      <Link href='/sign-in'>
-                        <Button variant='ghost'>Sign In</Button>
-                      </Link>
-                      <Link href='/sign-up'>
-                        <Button>Get Started</Button>
-                      </Link>
-                    </>
+                    <Link href='/sign-up'>
+                      <Button>Get Started</Button>
+                    </Link>
                   )}
                 </>
               )}
@@ -60,7 +59,7 @@ export default function HomePage() {
             <p className='text-xl text-gray-600 mb-8'>
               Logos Faith Development partners with churches to build affordable
               housing through modular construction. We provide 100% private
-              funding—your church shares ownership and creates lasting community
+              funding your church shares ownership and creates lasting community
               impact.
             </p>
             <div className='flex gap-4 justify-center flex-wrap'>
