@@ -66,6 +66,10 @@ interface SubmissionDetail {
   property_data_sources: string | null; // JSON string with enriched data from APIs
   property_additional_addresses: any | null; // Additional addresses with enriched data
   property_demolish_all_structures: boolean | null;
+
+  // Assessment data - user's custom inputs
+  available_build_sqft: number | null; // User's custom available build space input
+  available_build_acres: number | null;
 }
 
 export default function AssessmentVisualizationPage({
@@ -323,7 +327,19 @@ export default function AssessmentVisualizationPage({
             const isDemolish = submission.property_demolish_all_structures;
             const combinedLotSize = multiAddressInfo?.combined_lot_size_sqft;
 
-            if (isDemolish || additionalAddresses.length > 0) {
+            // PRIORITY: Use custom lot size if available (user-provided)
+            const displayLotSize =
+              submission.available_build_sqft ||
+              submission.property_lot_size_sqft ||
+              lotInfo?.size_sqft;
+            const isUserProvidedLot = !!submission.available_build_sqft;
+
+            // Show property details if: demolition planned, additional addresses, OR custom lot size provided
+            if (
+              isDemolish ||
+              additionalAddresses.length > 0 ||
+              isUserProvidedLot
+            ) {
               return (
                 <div className='bg-amber-50 border border-amber-200 rounded-lg p-4'>
                   <h4 className='font-semibold text-sm text-amber-900 mb-2 flex items-center gap-2'>
@@ -340,10 +356,14 @@ export default function AssessmentVisualizationPage({
                         </span>
                         <span className='text-gray-600'>
                           {' '}
-                          - Lot: {lotInfo?.size_sqft?.toLocaleString() ||
-                            'N/A'}{' '}
-                          sq ft
+                          - Lot: {displayLotSize?.toLocaleString() || 'N/A'} sq
+                          ft
                         </span>
+                        {isUserProvidedLot && (
+                          <span className='text-amber-600 font-semibold ml-1'>
+                            ⚠️ (Applicant-Submitted)
+                          </span>
+                        )}
                         {buildingInfo?.size_sqft && (
                           <span className='text-gray-600'>
                             , Building:{' '}
@@ -379,13 +399,21 @@ export default function AssessmentVisualizationPage({
                     ))}
 
                     {/* Combined Total */}
-                    {combinedLotSize && (
+                    {(displayLotSize || combinedLotSize) && (
                       <div className='mt-2 pt-2 border-t border-amber-300'>
                         <span className='font-semibold text-amber-900'>
-                          Combined Total: {combinedLotSize.toLocaleString()} sq
-                          ft ({1 + additionalAddresses.length} parcel
+                          Combined Total:{' '}
+                          {(
+                            displayLotSize || combinedLotSize
+                          )?.toLocaleString()}{' '}
+                          sq ft ({1 + additionalAddresses.length} parcel
                           {additionalAddresses.length > 0 ? 's' : ''})
                         </span>
+                        {isUserProvidedLot && (
+                          <span className='text-amber-600 font-semibold ml-2'>
+                            ⚠️ (Applicant-Submitted)
+                          </span>
+                        )}
                       </div>
                     )}
 
@@ -1214,11 +1242,19 @@ export default function AssessmentVisualizationPage({
         const multiAddressInfo = smartyData?.multi_address;
         const individualParcels = multiAddressInfo?.individual_parcels || [];
 
-        // Use multi_address combined data if available, otherwise fall back to lot/building
+        // PRIORITY: Use manual user input FIRST, then fall back to API data
+        // Check assessment.available_build_sqft (user's custom input from form)
         const lotData = smartyData?.lot;
         const buildingData = smartyData?.building;
+
+        // PRIORITY 1: User's custom available build space from assessment form
+        // PRIORITY 2: Property lot size (if entered separately)
+        // PRIORITY 3: API data from Smarty
         const combinedLotSize =
-          multiAddressInfo?.combined_lot_size_sqft || lotData?.size_sqft;
+          submission.available_build_sqft ||
+          submission.property_lot_size_sqft ||
+          multiAddressInfo?.combined_lot_size_sqft ||
+          lotData?.size_sqft;
         const combinedLotAcres = combinedLotSize
           ? (combinedLotSize / 43560).toFixed(2)
           : lotData?.size_acres?.toFixed(2);
@@ -1236,7 +1272,38 @@ export default function AssessmentVisualizationPage({
           combinedBuildingSize = buildingData?.size_sqft || 0;
         }
 
-        const availableBuildSpace = smartyData?.available_build_space;
+        // Calculate available build space - prioritize user input from assessment
+        let availableBuildSpace = smartyData?.available_build_space;
+        let isUserProvidedSpace = false;
+
+        // PRIORITY 1: User provided custom available space in assessment form (most accurate)
+        if (submission.available_build_sqft) {
+          availableBuildSpace = {
+            sqft: submission.available_build_sqft,
+            acres:
+              submission.available_build_acres ||
+              submission.available_build_sqft / 43560,
+            qualifies_for_logos: submission.available_build_sqft >= 10000,
+            minimum_required: 10000,
+          };
+          isUserProvidedSpace = true;
+        }
+        // PRIORITY 2: User provided custom lot size (calculate available space)
+        else if (submission.property_lot_size_sqft) {
+          // If full demolition is selected, ALL land is available (don't subtract buildings)
+          const userAvailableSpace = submission.property_demolish_all_structures
+            ? submission.property_lot_size_sqft
+            : submission.property_lot_size_sqft - combinedBuildingSize;
+          availableBuildSpace = {
+            sqft: userAvailableSpace,
+            acres: userAvailableSpace / 43560,
+            qualifies_for_logos: userAvailableSpace >= 10000,
+            minimum_required: 10000,
+          };
+          // DO NOT set isUserProvidedSpace = true here
+          // property_lot_size_sqft is standard form input, not a custom override
+        }
+
         const valuationData = smartyData?.valuation;
         const financialData = smartyData?.financial;
         const ownerData = smartyData?.owner;
@@ -1316,6 +1383,14 @@ export default function AssessmentVisualizationPage({
                       <div className='bg-blue-50 rounded-lg p-3 border border-blue-200'>
                         <p className='text-xs text-gray-600 mb-1'>
                           📐 Total Lot Size
+                          {submission.available_build_sqft && (
+                            <span
+                              className='ml-1 text-amber-600'
+                              title='User-provided value - verify with property owner'
+                            >
+                              ⚠️
+                            </span>
+                          )}
                         </p>
                         <p className='text-xl font-bold text-blue-700'>
                           {combinedLotSize?.toLocaleString() || 'N/A'}
@@ -1326,6 +1401,11 @@ export default function AssessmentVisualizationPage({
                             ` • ${individualParcels.length} parcel${
                               individualParcels.length > 1 ? 's' : ''
                             }`}
+                          {submission.available_build_sqft && (
+                            <span className='block text-amber-600 mt-1'>
+                              User-provided
+                            </span>
+                          )}
                         </p>
                       </div>
                       <div className='bg-orange-50 rounded-lg p-3 border border-orange-200'>
@@ -1347,6 +1427,14 @@ export default function AssessmentVisualizationPage({
                       <div className='bg-green-50 rounded-lg p-3 border border-green-200'>
                         <p className='text-xs text-gray-600 mb-1'>
                           ✨ Available Space
+                          {isUserProvidedSpace && (
+                            <span
+                              className='ml-1 text-amber-600'
+                              title='Calculated from user-provided lot size - verify with property owner'
+                            >
+                              ⚠️
+                            </span>
+                          )}
                         </p>
                         <p className='text-xl font-bold text-green-700'>
                           {availableBuildSpace.sqft?.toLocaleString() || 'N/A'}
@@ -1354,6 +1442,11 @@ export default function AssessmentVisualizationPage({
                         <p className='text-xs text-gray-600'>
                           sqft ({availableBuildSpace.acres?.toFixed(2) || 'N/A'}{' '}
                           acres)
+                          {isUserProvidedSpace && (
+                            <span className='block text-amber-600 mt-1'>
+                              Calculated from user input
+                            </span>
+                          )}
                         </p>
                       </div>
                     </div>

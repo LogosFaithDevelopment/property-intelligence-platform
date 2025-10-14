@@ -346,18 +346,18 @@ export default function AdminSubmissionDetailPage({
         </div>
       </div>
 
-      {/* Quick Actions - AI Assessment Visualization */}
-      <div className='mb-6 flex gap-3'>
-        <Link href={`/admin/submissions/${id}/assessment`} className='flex-1'>
+      {/* Quick Actions - AI Assessment & Download */}
+      <div className='mb-6 grid grid-cols-2 gap-3'>
+        <Link href={`/admin/submissions/${id}/assessment`}>
           <Button
             variant='default'
-            className='w-full py-6 text-lg bg-black hover:bg-gray-800'
+            className='w-full py-6 text-lg bg-blue-600 hover:bg-blue-700'
             disabled={!submission.overall_score}
           >
             <TrendingUp className='h-5 w-5 mr-2' />
             {submission.overall_score
-              ? 'View Full AI Assessment Data & Visualizations'
-              : 'AI Assessment Pending (Processing...)'}
+              ? 'Full Development Analysis'
+              : 'Analysis Pending...'}
           </Button>
         </Link>
         <Button
@@ -403,39 +403,10 @@ export default function AdminSubmissionDetailPage({
               });
             }
           }}
-          className='py-6 px-8 text-lg bg-gradient-to-r from-yellow-500 to-yellow-700 hover:from-yellow-600 hover:to-yellow-800'
+          className='w-full py-6 px-8 text-lg bg-gradient-to-r from-yellow-500 to-yellow-700 hover:from-yellow-600 hover:to-yellow-800'
           disabled={!submission.overall_score}
         >
-          Download Report
-        </Button>
-      </div>
-
-      {/* Action Buttons */}
-      <div className='mb-6 flex gap-3'>
-        <Button
-          onClick={() => setShowApproveDialog(true)}
-          className='flex-1 bg-green-600 hover:bg-green-700'
-          disabled={approveMutation.isPending}
-        >
-          <CheckCircle className='h-4 w-4 mr-2' />
-          {approveMutation.isPending ? 'Approving...' : 'Approve Submission'}
-        </Button>
-        <Button
-          onClick={() => setShowRejectDialog(true)}
-          variant='destructive'
-          className='flex-1'
-          disabled={rejectMutation.isPending}
-        >
-          <XCircle className='h-4 w-4 mr-2' />
-          {rejectMutation.isPending ? 'Rejecting...' : 'Reject Submission'}
-        </Button>
-        <Button
-          onClick={() => setShowCommentDialog(true)}
-          variant='outline'
-          disabled={commentMutation.isPending}
-        >
-          <MessageSquare className='h-4 w-4 mr-2' />
-          Add Comment
+          Download Summary Report
         </Button>
       </div>
 
@@ -557,675 +528,283 @@ export default function AdminSubmissionDetailPage({
         </DialogContent>
       </Dialog>
 
-      {/* Church Information */}
+      {/* Entity Information */}
       <Card className='mb-6'>
         <CardHeader>
           <CardTitle className='flex items-center gap-2'>
             <Building2 className='h-5 w-5' />
-            Church Information
-          </CardTitle>
-        </CardHeader>
-        <CardContent className='grid grid-cols-1 md:grid-cols-2 gap-4'>
-          <div>
-            <label className='text-sm font-medium text-gray-500'>
-              Legal Name
-            </label>
-            <p className='mt-1'>{submission.church_legal_name || 'N/A'}</p>
-          </div>
-          <div>
-            <label className='text-sm font-medium text-gray-500'>
-              Denomination
-            </label>
-            <p className='mt-1'>{submission.church_denomination || 'N/A'}</p>
-          </div>
-          <div>
-            <label className='text-sm font-medium text-gray-500'>
-              Founded Year
-            </label>
-            <p className='mt-1'>{submission.church_founded_year || 'N/A'}</p>
-          </div>
-          <div>
-            <label className='text-sm font-medium text-gray-500'>
-              Tax Exempt Status
-            </label>
-            <p className='mt-1'>
-              {submission.church_tax_exempt_status || 'N/A'}
-            </p>
-          </div>
-          <div>
-            <label className='text-sm font-medium text-gray-500'>EIN</label>
-            <p className='mt-1'>{submission.church_tax_exempt_id || 'N/A'}</p>
-          </div>
-          <div>
-            <label className='text-sm font-medium text-gray-500'>
-              Congregation Size
-            </label>
-            <p className='mt-1 flex items-center gap-1'>
-              <Users className='h-4 w-4 text-gray-500' />
-              {submission.church_congregation_size?.toLocaleString() || 'N/A'}
-            </p>
-          </div>
-          <div>
-            <label className='text-sm font-medium text-gray-500'>
-              Annual Budget
-            </label>
-            <p className='mt-1 flex items-center gap-1'>
-              <DollarSign className='h-4 w-4 text-gray-500' />
-              {submission.church_annual_budget
-                ? `$${submission.church_annual_budget.toLocaleString()}`
-                : 'N/A'}
-            </p>
-          </div>
-          <div>
-            <label className='text-sm font-medium text-gray-500'>
-              Submitted
-            </label>
-            <p className='mt-1 flex items-center gap-1'>
-              <Calendar className='h-4 w-4 text-gray-500' />
-              {new Date(submission.created_at).toLocaleDateString()}
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Contact Information */}
-      <Card className='mb-6'>
-        <CardHeader>
-          <CardTitle>Contact Information</CardTitle>
-        </CardHeader>
-        <CardContent className='space-y-3'>
-          <div className='flex items-center gap-2'>
-            <Mail className='h-4 w-4 text-gray-500' />
-            <a
-              href={`mailto:${submission.church_primary_email}`}
-              className='text-blue-600 hover:underline'
-            >
-              {submission.church_primary_email}
-            </a>
-          </div>
-          {submission.church_primary_phone && (
-            <div className='flex items-center gap-2'>
-              <Phone className='h-4 w-4 text-gray-500' />
-              <a
-                href={`tel:${submission.church_primary_phone}`}
-                className='text-blue-600 hover:underline'
-              >
-                {submission.church_primary_phone}
-              </a>
-            </div>
-          )}
-          {submission.church_website_url && (
-            <div className='flex items-center gap-2'>
-              <Globe className='h-4 w-4 text-gray-500' />
-              <a
-                href={submission.church_website_url}
-                target='_blank'
-                rel='noopener noreferrer'
-                className='text-blue-600 hover:underline'
-              >
-                {submission.church_website_url}
-              </a>
-            </div>
-          )}
-          {(submission.church_street_address || submission.church_city) && (
-            <div className='flex items-start gap-2'>
-              <MapPin className='h-4 w-4 text-gray-500 mt-1' />
-              <div>
-                {submission.church_street_address && (
-                  <p>{submission.church_street_address}</p>
-                )}
-                {(submission.church_city ||
-                  submission.church_state ||
-                  submission.church_zip_code) && (
-                  <p>
-                    {[
-                      submission.church_city,
-                      submission.church_state,
-                      submission.church_zip_code,
-                    ]
-                      .filter(Boolean)
-                      .join(', ')}
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Property Overview - Consolidated Card */}
-      {(() => {
-        const smartyData = getSmartyData();
-        const lotInfo = smartyData?.lot;
-        const buildingInfo = smartyData?.building;
-        const combinedLotSize = smartyData?.property?.combined_lot_size_sqft;
-        const additionalAddresses =
-          smartyData?.property?.additional_addresses || [];
-
-        return (
-          <Card className='mb-6'>
-            <CardHeader>
-              <CardTitle className='flex items-center gap-2'>
-                <Building2 className='h-5 w-5' />
-                Property Overview
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {/* Address */}
-              <div className='mb-6 pb-4 border-b'>
-                {submission.property_street_address && (
-                  <h3 className='text-xl font-bold text-gray-900 mb-1'>
-                    {submission.property_street_address}
-                  </h3>
-                )}
-                {(submission.property_city ||
-                  submission.property_state ||
-                  submission.property_zip_code) && (
-                  <p className='text-gray-600 text-lg'>
-                    {[
-                      submission.property_city,
-                      submission.property_state,
-                      submission.property_zip_code,
-                    ]
-                      .filter(Boolean)
-                      .join(', ')}
-                  </p>
-                )}
-              </div>
-
-              {/* Multi-Parcel Banner */}
-              {combinedLotSize && additionalAddresses.length > 0 && (
-                <div className='mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-300 rounded-lg'>
-                  <div className='flex items-center justify-between'>
-                    <div>
-                      <label className='text-xs font-bold text-blue-700 uppercase tracking-wide flex items-center gap-1 mb-1'>
-                        <Building2 className='h-4 w-4' />
-                        Multi-Parcel Development Site
-                      </label>
-                      <p className='text-2xl font-bold text-blue-900'>
-                        {combinedLotSize.toLocaleString()}{' '}
-                        <span className='text-base font-normal text-blue-700'>
-                          sq ft total
-                        </span>
-                      </p>
-                      <p className='text-sm text-blue-700 mt-1'>
-                        {1 + additionalAddresses.length} parcels combined
-                      </p>
-                    </div>
-                  </div>
-                  {/* Additional Addresses List */}
-                  <div className='mt-4 pt-4 border-t border-blue-200'>
-                    <label className='text-xs font-bold text-blue-700 uppercase block mb-2'>
-                      📍 Included Parcels
-                    </label>
-                    <div className='space-y-1'>
-                      <div className='text-sm text-blue-900'>
-                        • {submission.property_street_address}
-                      </div>
-                      {additionalAddresses.map((addr: any, idx: number) => (
-                        <div key={idx} className='text-sm text-blue-900'>
-                          • {addr.address}, {addr.city}, {addr.state}{' '}
-                          {addr.zip_code}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Key Metrics Grid */}
-              <div className='grid grid-cols-2 md:grid-cols-4 gap-4'>
-                {/* Lot Size */}
-                <div className='p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg border border-blue-200'>
-                  <label className='text-xs font-medium text-blue-700 uppercase block mb-1'>
-                    Lot Size
-                  </label>
-                  <p className='text-2xl font-bold text-blue-900'>
-                    {(
-                      combinedLotSize ||
-                      lotInfo?.size_sqft ||
-                      submission.property_lot_size_sqft
-                    )?.toLocaleString() || 'N/A'}
-                  </p>
-                  <p className='text-xs text-blue-600 mt-1'>sq ft</p>
-                  {(lotInfo?.size_acres ||
-                    submission.property_lot_size_acres) && (
-                    <p className='text-xs text-blue-600 mt-1'>
-                      (
-                      {(
-                        lotInfo?.size_acres ||
-                        submission.property_lot_size_acres
-                      )?.toFixed(2)}{' '}
-                      acres)
-                    </p>
-                  )}
-                  {lotInfo?.lot_numbers && (
-                    <p className='text-xs text-gray-600 mt-2'>
-                      Lots: {lotInfo.lot_numbers}
-                    </p>
-                  )}
-                  {lotInfo?.parcel_number && (
-                    <p className='text-xs text-gray-600'>
-                      Parcel: {lotInfo.parcel_number}
-                    </p>
-                  )}
-                </div>
-
-                {/* Building Size */}
-                <div className='p-4 bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg border border-gray-200'>
-                  <label className='text-xs font-medium text-gray-700 uppercase block mb-1'>
-                    Building Size
-                  </label>
-                  <p className='text-2xl font-bold text-gray-900'>
-                    {(
-                      buildingInfo?.size_sqft ||
-                      submission.property_building_sqft
-                    )?.toLocaleString() || 'N/A'}
-                  </p>
-                  <p className='text-xs text-gray-600 mt-1'>sq ft</p>
-                </div>
-
-                {/* Year Built */}
-                <div className='p-4 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg border border-purple-200'>
-                  <label className='text-xs font-medium text-purple-700 uppercase block mb-1'>
-                    Year Built
-                  </label>
-                  <p className='text-2xl font-bold text-purple-900'>
-                    {buildingInfo?.year_built ||
-                      submission.property_year_built ||
-                      'N/A'}
-                  </p>
-                </div>
-
-                {/* Current Use */}
-                <div className='p-4 bg-gradient-to-br from-green-50 to-green-100 rounded-lg border border-green-200'>
-                  <label className='text-xs font-medium text-green-700 uppercase block mb-1'>
-                    Current Use
-                  </label>
-                  <p className='text-sm font-semibold text-green-900'>
-                    {submission.property_current_usage || 'N/A'}
-                  </p>
-                </div>
-
-                {/* Zoning */}
-                <div className='p-4 bg-gradient-to-br from-amber-50 to-amber-100 rounded-lg border border-amber-200'>
-                  <label className='text-xs font-medium text-amber-700 uppercase block mb-1'>
-                    Zoning
-                  </label>
-                  <p className='text-xl font-bold text-amber-900'>
-                    {submission.property_zoning_description || 'N/A'}
-                  </p>
-                </div>
-              </div>
-
-              {/* Mortgage Status */}
-              {(() => {
-                const financialInfo = smartyData?.financial;
-                if (financialInfo && !financialInfo.has_mortgages) {
-                  return (
-                    <div className='mt-6 bg-green-50 p-4 rounded-lg border border-green-200'>
-                      <p className='text-sm text-green-800 font-medium flex items-center gap-2'>
-                        <CheckCircle className='h-4 w-4' />
-                        Property owned free and clear (no mortgages on record)
-                      </p>
-                    </div>
-                  );
-                }
-                return null;
-              })()}
-            </CardContent>
-          </Card>
-        );
-      })()}
-
-      {/* Ownership & Financial Details */}
-      <Card className='mb-6'>
-        <CardHeader>
-          <CardTitle className='flex items-center gap-2'>
-            <DollarSign className='h-5 w-5' />
-            Ownership & Financial Details
+            Entity Information
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
-            {/* Ownership Status */}
-            <div className='p-4 bg-gray-50 rounded-lg border'>
-              <h4 className='font-semibold text-sm text-gray-700 mb-3'>
-                Property Ownership
-              </h4>
-              <div className='space-y-2 text-sm'>
-                <div className='flex justify-between items-center'>
-                  <span className='text-gray-600'>Owned Free & Clear:</span>
-                  <span className='font-medium'>
-                    {submission.owns_property_free_clear === true ? (
-                      <Badge className='bg-green-600'>✓ Yes</Badge>
-                    ) : submission.owns_property_free_clear === false ? (
-                      <Badge variant='destructive'>✗ No</Badge>
-                    ) : (
-                      'Not specified'
-                    )}
-                  </span>
-                </div>
-                {submission.has_mortgage !== null && (
-                  <div className='flex justify-between items-center'>
-                    <span className='text-gray-600'>Has Mortgage:</span>
-                    <span className='font-medium'>
-                      {submission.has_mortgage ? 'Yes' : 'No'}
-                    </span>
-                  </div>
-                )}
-                {submission.mortgage_balance && (
-                  <div className='flex justify-between items-center'>
-                    <span className='text-gray-600'>Mortgage Balance:</span>
-                    <span className='font-medium'>
-                      ${submission.mortgage_balance.toLocaleString()}
-                    </span>
-                  </div>
-                )}
-                <div className='flex justify-between items-center'>
-                  <span className='text-gray-600'>
-                    Willing to Ground Lease:
-                  </span>
-                  <span className='font-medium'>
-                    {submission.willing_to_ground_lease === true ? (
-                      <Badge className='bg-blue-600'>✓ Yes</Badge>
-                    ) : submission.willing_to_ground_lease === false ? (
-                      <Badge variant='outline'>✗ No</Badge>
-                    ) : (
-                      'Not specified'
-                    )}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Financial Details */}
-            <div className='p-4 bg-gray-50 rounded-lg border'>
-              <h4 className='font-semibold text-sm text-gray-700 mb-3'>
-                Financial Information
-              </h4>
-              <div className='space-y-2 text-sm'>
-                {submission.existing_debt_amount && (
-                  <div className='flex justify-between items-center'>
-                    <span className='text-gray-600'>Existing Debt:</span>
-                    <span className='font-medium'>
-                      ${submission.existing_debt_amount.toLocaleString()}
-                    </span>
-                  </div>
-                )}
-                {submission.expects_sanctuary_replacement !== null && (
-                  <div className='flex justify-between items-center'>
-                    <span className='text-gray-600'>
-                      Expects Sanctuary Replacement:
-                    </span>
-                    <span className='font-medium'>
-                      {submission.expects_sanctuary_replacement ? (
-                        <Badge variant='outline'>Yes</Badge>
-                      ) : (
-                        'No'
-                      )}
-                    </span>
-                  </div>
-                )}
-                {submission.sanctuary_replacement_cost_estimate && (
-                  <div className='flex justify-between items-center'>
-                    <span className='text-gray-600'>Estimated Cost:</span>
-                    <span className='font-medium'>
-                      $
-                      {submission.sanctuary_replacement_cost_estimate.toLocaleString()}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Congregation Approval */}
-      <Card className='mb-6'>
-        <CardHeader>
-          <CardTitle className='flex items-center gap-2'>
-            <Users className='h-5 w-5' />
-            Congregation Approval & Support
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
-            {/* Voting Status */}
-            <div className='p-4 bg-gray-50 rounded-lg border'>
-              <h4 className='font-semibold text-sm text-gray-700 mb-3'>
-                Congregation Vote
-              </h4>
-              <div className='space-y-3'>
-                <div className='flex justify-between items-center'>
-                  <span className='text-gray-600 text-sm'>
-                    Congregation Voted:
-                  </span>
-                  <span className='font-medium'>
-                    {submission.congregation_voted === true ? (
-                      <Badge className='bg-green-600'>✓ Yes</Badge>
-                    ) : submission.congregation_voted === false ? (
-                      <Badge variant='outline'>Not Yet</Badge>
-                    ) : (
-                      'Not specified'
-                    )}
-                  </span>
-                </div>
-                {submission.congregation_voted &&
-                  submission.vote_percentage !== null && (
-                    <div className='mt-4'>
-                      <div className='flex justify-between items-center mb-2'>
-                        <span className='text-gray-600 text-sm'>
-                          Approval Percentage:
-                        </span>
-                        <span className='text-2xl font-bold text-blue-600'>
-                          {submission.vote_percentage}%
-                        </span>
-                      </div>
-                      <div className='w-full bg-gray-200 rounded-full h-3'>
-                        <div
-                          className={`h-3 rounded-full ${
-                            submission.vote_percentage >= 66
-                              ? 'bg-green-500'
-                              : submission.vote_percentage > 50
-                              ? 'bg-yellow-500'
-                              : 'bg-red-500'
-                          }`}
-                          style={{ width: `${submission.vote_percentage}%` }}
-                        />
-                      </div>
-                      <p className='text-xs text-gray-500 mt-1'>
-                        {submission.vote_percentage >= 66
-                          ? '✓ Strong support (66%+)'
-                          : submission.vote_percentage > 50
-                          ? 'Meets minimum (>50%)'
-                          : '⚠️ Below minimum requirement'}
-                      </p>
-                    </div>
-                  )}
-              </div>
-            </div>
-
-            {/* Leadership & Decision Making */}
-            <div className='p-4 bg-gray-50 rounded-lg border'>
-              <h4 className='font-semibold text-sm text-gray-700 mb-3'>
-                Leadership & Decision Making
-              </h4>
-              <div className='space-y-2 text-sm'>
-                {submission.leadership_support && (
-                  <div className='flex justify-between items-start'>
-                    <span className='text-gray-600'>Leadership Support:</span>
-                    <span className='font-medium text-right'>
-                      {submission.leadership_support}
-                    </span>
-                  </div>
-                )}
-                {submission.decision_authority && (
-                  <div className='flex justify-between items-start'>
-                    <span className='text-gray-600'>Decision Authority:</span>
-                    <span className='font-medium text-right'>
-                      {submission.decision_authority}
-                    </span>
-                  </div>
-                )}
-                {submission.decision_timeline && (
-                  <div className='flex justify-between items-start'>
-                    <span className='text-gray-600'>Decision Timeline:</span>
-                    <span className='font-medium text-right'>
-                      {submission.decision_timeline}
-                    </span>
-                  </div>
-                )}
-                {submission.denomination_approval_needed !== null && (
-                  <div className='flex justify-between items-center'>
-                    <span className='text-gray-600'>
-                      Denomination Approval Needed:
-                    </span>
-                    <span className='font-medium'>
-                      {submission.denomination_approval_needed ? 'Yes' : 'No'}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Development Preferences */}
-      <Card className='mb-6'>
-        <CardHeader>
-          <CardTitle className='flex items-center gap-2'>
-            <Building2 className='h-5 w-5' />
-            Development Preferences & Requirements
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className='grid grid-cols-1 md:grid-cols-3 gap-6'>
-            {/* Parking */}
-            <div className='p-4 bg-blue-50 rounded-lg border border-blue-200'>
-              <h4 className='font-semibold text-sm text-blue-900 mb-3 flex items-center gap-2'>
-                🅿️ Parking Requirements
-              </h4>
-              <div className='space-y-2 text-sm'>
-                {submission.current_parking_spaces !== null && (
-                  <div className='flex justify-between items-center'>
-                    <span className='text-blue-700'>Current Spaces:</span>
-                    <span className='font-bold text-blue-900'>
-                      {submission.current_parking_spaces}
-                    </span>
-                  </div>
-                )}
-                {submission.parking_spaces_needed_after !== null && (
-                  <div className='flex justify-between items-center'>
-                    <span className='text-blue-700'>Needed After:</span>
-                    <span className='font-bold text-blue-900'>
-                      {submission.parking_spaces_needed_after}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Timeline & Units */}
-            <div className='p-4 bg-green-50 rounded-lg border border-green-200'>
-              <h4 className='font-semibold text-sm text-green-900 mb-3 flex items-center gap-2'>
-                📅 Timeline & Units
-              </h4>
-              <div className='space-y-2 text-sm'>
-                {submission.timeline_preference && (
-                  <div className='flex justify-between items-start'>
-                    <span className='text-green-700'>Timeline:</span>
-                    <span className='font-bold text-green-900 text-right'>
-                      {submission.timeline_preference}
-                    </span>
-                  </div>
-                )}
-                {submission.preferred_unit_count !== null && (
-                  <div className='flex justify-between items-center'>
-                    <span className='text-green-700'>Preferred Units:</span>
-                    <span className='font-bold text-green-900'>
-                      {submission.preferred_unit_count}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Financial Preferences */}
-            <div className='p-4 bg-purple-50 rounded-lg border border-purple-200'>
-              <h4 className='font-semibold text-sm text-purple-900 mb-3 flex items-center gap-2'>
-                💰 Financial Structure
-              </h4>
-              <div className='space-y-2 text-sm'>
-                {submission.revenue_sharing_preference && (
-                  <div>
-                    <span className='text-purple-700 block mb-1'>
-                      Revenue Sharing:
-                    </span>
-                    <span className='font-bold text-purple-900'>
-                      {submission.revenue_sharing_preference}
-                    </span>
-                  </div>
-                )}
-                {submission.affordability_target && (
-                  <div>
-                    <span className='text-purple-700 block mb-1'>
-                      Target Income:
-                    </span>
-                    <span className='font-bold text-purple-900 text-xs'>
-                      {submission.affordability_target}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Special Requirements */}
-          {submission.special_requirements && (
-            <div className='mt-6 p-4 bg-amber-50 rounded-lg border border-amber-200'>
-              <h4 className='font-semibold text-sm text-amber-900 mb-2 flex items-center gap-2'>
-                ⭐ Special Requirements & Considerations
-              </h4>
-              <p className='text-sm text-amber-900 whitespace-pre-wrap'>
-                {submission.special_requirements}
+          <div className='grid grid-cols-1 md:grid-cols-2 gap-4 mb-6'>
+            <div>
+              <label className='text-sm font-medium text-gray-500'>
+                Entity Name
+              </label>
+              <p className='mt-1 font-semibold text-lg'>
+                {submission.church_name}
               </p>
             </div>
-          )}
-
-          {/* Development Involvement */}
-          {submission.development_involvement_level && (
-            <div className='mt-4 p-3 bg-gray-100 rounded border'>
-              <div className='flex items-center justify-between'>
-                <span className='text-sm text-gray-600'>
-                  Development Involvement Level:
-                </span>
-                <span className='font-medium text-gray-900'>
-                  {submission.development_involvement_level}
-                </span>
-              </div>
+            <div>
+              <label className='text-sm font-medium text-gray-500'>
+                Entity Type
+              </label>
+              <p className='mt-1'>
+                {submission.church_tax_exempt_status || 'N/A'}
+              </p>
             </div>
-          )}
+            {submission.church_website_url && (
+              <div>
+                <label className='text-sm font-medium text-gray-500'>
+                  Website
+                </label>
+                <p className='mt-1'>
+                  <a
+                    href={submission.church_website_url}
+                    target='_blank'
+                    rel='noopener noreferrer'
+                    className='text-blue-600 hover:underline flex items-center gap-1'
+                  >
+                    <Globe className='h-4 w-4' />
+                    {submission.church_website_url}
+                  </a>
+                </p>
+              </div>
+            )}
+            <div>
+              <label className='text-sm font-medium text-gray-500'>
+                Submitted
+              </label>
+              <p className='mt-1 flex items-center gap-1'>
+                <Calendar className='h-4 w-4 text-gray-500' />
+                {new Date(submission.created_at).toLocaleDateString()}
+              </p>
+            </div>
+          </div>
+
+          {/* Primary Contact */}
+          <div className='pt-4 border-t'>
+            <h3 className='text-sm font-semibold text-gray-700 mb-3'>
+              Primary Contact
+            </h3>
+            <div className='space-y-2'>
+              <div className='flex items-center gap-2'>
+                <Mail className='h-4 w-4 text-gray-500' />
+                <a
+                  href={`mailto:${submission.church_primary_email}`}
+                  className='text-blue-600 hover:underline'
+                >
+                  {submission.church_primary_email}
+                </a>
+              </div>
+              {submission.church_primary_phone && (
+                <div className='flex items-center gap-2'>
+                  <Phone className='h-4 w-4 text-gray-500' />
+                  <a
+                    href={`tel:${submission.church_primary_phone}`}
+                    className='text-blue-600 hover:underline'
+                  >
+                    {submission.church_primary_phone}
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
         </CardContent>
       </Card>
 
-      {/* Admin Notes */}
-
-      {/* Admin Notes */}
-      {submission.reviewer_notes && (
-        <Card>
+      {/* Ownership & Financial */}
+      {(submission.assessed_value || submission.existing_debt_amount) && (
+        <Card className='mb-6'>
           <CardHeader>
-            <CardTitle>Admin Notes & History</CardTitle>
+            <CardTitle className='flex items-center gap-2'>
+              <DollarSign className='h-5 w-5' />
+              Ownership & Financial
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className='whitespace-pre-wrap text-sm bg-gray-50 p-4 rounded border'>
-              {submission.reviewer_notes}
+            <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+              {submission.assessed_value && (
+                <div>
+                  <label className='text-sm font-medium text-gray-500'>
+                    Owner Reported Current Value
+                  </label>
+                  <p className='mt-1 text-lg font-semibold'>
+                    ${submission.assessed_value.toLocaleString()}
+                  </p>
+                </div>
+              )}
+              {submission.existing_debt_amount && (
+                <div>
+                  <label className='text-sm font-medium text-gray-500'>
+                    Existing Debt Amount
+                  </label>
+                  <p className='mt-1 text-lg font-semibold'>
+                    ${submission.existing_debt_amount.toLocaleString()}
+                  </p>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
       )}
+
+      {/* Notes Section */}
+      <Card className='mb-6'>
+        <CardHeader>
+          <CardTitle className='flex items-center gap-2'>
+            <MessageSquare className='h-5 w-5' />
+            Notes
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {/* Existing Notes Display */}
+          {submission.reviewer_notes && (
+            <div className='mb-6'>
+              <div className='space-y-3'>
+                {/* Parse and display notes with user colors */}
+                {submission.reviewer_notes.split('\n\n').map((note, index) => {
+                  // Extract username and timestamp from note format
+                  // Format: "💬 Username (2024-01-01 12:00 UTC): Message"
+                  const userMatch = note.match(/^[💬✅❌🔄]\s*(.+?)\s*\(/);
+                  const timestampMatch = note.match(/\((.+?)\)/);
+                  const userName = userMatch ? userMatch[1] : 'Admin User';
+                  const timestamp = timestampMatch ? timestampMatch[1] : '';
+
+                  // Hash the username to get consistent color
+                  const hashCode = (str: string) => {
+                    let hash = 0;
+                    for (let i = 0; i < str.length; i++) {
+                      const char = str.charCodeAt(i);
+                      hash = (hash << 5) - hash + char;
+                      hash = hash & hash; // Convert to 32bit integer
+                    }
+                    return Math.abs(hash);
+                  };
+
+                  // Color options for different users
+                  const colorPairs = [
+                    {
+                      bg: 'bg-blue-50',
+                      border: 'border-blue-200',
+                      text: 'text-blue-700',
+                    },
+                    {
+                      bg: 'bg-green-50',
+                      border: 'border-green-200',
+                      text: 'text-green-700',
+                    },
+                    {
+                      bg: 'bg-purple-50',
+                      border: 'border-purple-200',
+                      text: 'text-purple-700',
+                    },
+                    {
+                      bg: 'bg-amber-50',
+                      border: 'border-amber-200',
+                      text: 'text-amber-700',
+                    },
+                    {
+                      bg: 'bg-pink-50',
+                      border: 'border-pink-200',
+                      text: 'text-pink-700',
+                    },
+                    {
+                      bg: 'bg-indigo-50',
+                      border: 'border-indigo-200',
+                      text: 'text-indigo-700',
+                    },
+                    {
+                      bg: 'bg-cyan-50',
+                      border: 'border-cyan-200',
+                      text: 'text-cyan-700',
+                    },
+                    {
+                      bg: 'bg-rose-50',
+                      border: 'border-rose-200',
+                      text: 'text-rose-700',
+                    },
+                  ];
+
+                  const userHash = hashCode(userName);
+                  const colorScheme = colorPairs[userHash % colorPairs.length];
+
+                  return (
+                    <div
+                      key={index}
+                      className={`p-4 rounded-lg border ${colorScheme.bg} ${colorScheme.border}`}
+                    >
+                      <div className='flex items-center gap-2 mb-2'>
+                        <span
+                          className={`text-sm font-semibold ${colorScheme.text}`}
+                        >
+                          {userName}
+                        </span>
+                        {timestamp && (
+                          <span className='text-xs text-gray-500'>
+                            {timestamp}
+                          </span>
+                        )}
+                      </div>
+                      <p className='text-sm text-gray-800 whitespace-pre-wrap'>
+                        {note}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Add New Note */}
+          <div className='space-y-3'>
+            <label className='text-sm font-medium text-gray-700'>
+              Add New Note
+            </label>
+            <Textarea
+              placeholder='Enter your notes here...'
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              className='min-h-[120px]'
+            />
+            <Button
+              onClick={() => {
+                if (comment.trim()) {
+                  setShowCommentDialog(true);
+                }
+              }}
+              disabled={!comment.trim()}
+              className='w-full'
+            >
+              Save Note
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Action Buttons */}
+      <div className='flex gap-3 mb-6'>
+        <Button
+          onClick={() => setShowApproveDialog(true)}
+          disabled={submission.status === 'approved'}
+          className='flex-1 bg-green-600 hover:bg-green-700 text-white'
+        >
+          <CheckCircle className='mr-2 h-4 w-4' />
+          {submission.status === 'approved'
+            ? 'Approved'
+            : 'Approve Application'}
+        </Button>
+        <Button
+          onClick={() => setShowRejectDialog(true)}
+          disabled={submission.status === 'rejected'}
+          variant='destructive'
+          className='flex-1'
+        >
+          <XCircle className='mr-2 h-4 w-4' />
+          {submission.status === 'rejected' ? 'Rejected' : 'Reject Application'}
+        </Button>
+      </div>
     </div>
   );
 }

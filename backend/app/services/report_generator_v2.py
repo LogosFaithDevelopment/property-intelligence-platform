@@ -352,23 +352,40 @@ class ReportGeneratorV2:
         # Property Details (parse enriched data)
         content.append(Paragraph("<b>Property Details</b>", subsection_style))
         
-        # Get enriched data from property_obj - use the SAME source as the assessment page!
-        # The assessment page uses: smarty_data.multi_address.individual_parcels[0].lot.size_sqft
+        # Get enriched data from property_obj - PRIORITY: assessment custom input > property form input > API data
+        # CRITICAL PRIORITY ORDER:
+        # 1. assessment.available_build_sqft (user manually entered on form - highest priority)
+        # 2. property_obj.lot_size_sqft (from property form or API enrichment)
+        # 3. smarty_data (API fallback)
+        
         data_sources = self._parse_json_field(property_obj.data_sources) if hasattr(property_obj, 'data_sources') else {}
         smarty_data = data_sources.get('smarty_data', {}).get('data', {}) if isinstance(data_sources, dict) else {}
         
-        # Get from individual_parcels[0] if multi-address, otherwise from root smarty_data
-        multi_address_info = smarty_data.get('multi_address', {})
-        individual_parcels = multi_address_info.get('individual_parcels', []) if isinstance(multi_address_info, dict) else []
+        is_user_provided = False  # Flag to track if using applicant-submitted custom value
         
-        if individual_parcels and len(individual_parcels) > 0:
-            primary_parcel = individual_parcels[0]
-            primary_lot_sqft = primary_parcel.get('lot', {}).get('size_sqft') if isinstance(primary_parcel, dict) else None
-            primary_building_sqft = primary_parcel.get('building', {}).get('size_sqft') if isinstance(primary_parcel, dict) else None
+        # PRIORITY 1: Assessment custom lot size (applicant manually entered - most accurate)
+        if hasattr(assessment, 'available_build_sqft') and assessment.available_build_sqft:
+            primary_lot_sqft = assessment.available_build_sqft
+            primary_building_sqft = property_obj.building_sqft if hasattr(property_obj, 'building_sqft') else 0
+            is_user_provided = True
+        # PRIORITY 2: Property form lot size (user entered in property form)
+        elif hasattr(property_obj, 'lot_size_sqft') and property_obj.lot_size_sqft:
+            primary_lot_sqft = property_obj.lot_size_sqft
+            primary_building_sqft = property_obj.building_sqft if hasattr(property_obj, 'building_sqft') else 0
         else:
-            # Fallback to root smarty_data
-            primary_lot_sqft = smarty_data.get('lot', {}).get('size_sqft') if smarty_data else None
-            primary_building_sqft = smarty_data.get('building', {}).get('size_sqft') if smarty_data else None
+            # PRIORITY 3: API data (smarty_data)
+            # Get from individual_parcels[0] if multi-address, otherwise from root smarty_data
+            multi_address_info = smarty_data.get('multi_address', {})
+            individual_parcels = multi_address_info.get('individual_parcels', []) if isinstance(multi_address_info, dict) else []
+            
+            if individual_parcels and len(individual_parcels) > 0:
+                primary_parcel = individual_parcels[0]
+                primary_lot_sqft = primary_parcel.get('lot', {}).get('size_sqft') if isinstance(primary_parcel, dict) else None
+                primary_building_sqft = primary_parcel.get('building', {}).get('size_sqft') if isinstance(primary_parcel, dict) else None
+            else:
+                # Fallback to root smarty_data
+                primary_lot_sqft = smarty_data.get('lot', {}).get('size_sqft') if smarty_data else None
+                primary_building_sqft = smarty_data.get('building', {}).get('size_sqft') if smarty_data else None
         
         # Build property details text
         prop_details = []
@@ -376,6 +393,9 @@ class ReportGeneratorV2:
             detail_line = f"• {property_obj.street_address}"
             if primary_lot_sqft:
                 detail_line += f" - Lot: {primary_lot_sqft:,} sq ft"
+                # Add indicator if this is applicant-submitted custom value
+                if is_user_provided:
+                    detail_line += " ⚠️ (Applicant-Submitted)"
             if primary_building_sqft:
                 detail_line += f", Building: {primary_building_sqft:,} sq ft"
             prop_details.append(detail_line)
@@ -411,7 +431,16 @@ class ReportGeneratorV2:
                 content.append(Paragraph(detail, body_style))
         
         if total_parcels > 1:
-            content.append(Paragraph(f"<b>Combined Total:</b> {combined_lot:,} sq ft ({total_parcels} parcels)", body_style))
+            combined_text = f"<b>Combined Total:</b> {combined_lot:,} sq ft ({total_parcels} parcels)"
+            if is_user_provided:
+                combined_text += " ⚠️ (Applicant-Submitted)"
+            content.append(Paragraph(combined_text, body_style))
+        elif is_user_provided and total_parcels == 1:
+            # Single parcel with user-provided value - add note after property details
+            content.append(Paragraph(
+                "⚠️ <i>Note: Lot size is applicant-submitted value. Verify with property records.</i>",
+                body_style
+            ))
         
         # Demolition notice
         is_demolish = property_obj.demolish_all_structures if hasattr(property_obj, 'demolish_all_structures') else False

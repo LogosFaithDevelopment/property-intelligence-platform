@@ -12,10 +12,6 @@ import { useSubmitProperty } from '@/hooks/useSubmissions';
 import { toast } from 'sonner';
 import { Section1ChurchInfo } from './sections/section-1-church-info';
 import { Section2PropertyDetails } from './sections/section-2-property-details';
-import { Section3Ownership } from './sections/section-3-ownership';
-import { Section4Approval } from './sections/section-4-approval';
-import { Section5Parking } from './sections/section-5-parking';
-import { Section6Timeline } from './sections/section-6-timeline';
 import type { z } from 'zod';
 
 type FormData = z.infer<typeof churchSubmissionSchema>;
@@ -24,76 +20,28 @@ type FormData = z.infer<typeof churchSubmissionSchema>;
 const STEP_FIELDS = {
   1: [
     'church_name',
-    'legal_name',
-    'denomination',
-    'founded_year',
     'entity_type',
-    'ein_number',
     'website',
-    'street_address',
-    'city',
-    'state',
-    'zip_code',
-    'congregation_size',
-    'annual_budget',
     'primary_contact_name',
     'primary_contact_email',
     'primary_contact_phone',
+    'assessed_value',
+    'existing_debt_amount',
   ] as const,
   2: [
     'property_address',
     'property_city',
     'property_state',
     'property_zip_code',
-    // latitude and longitude are optional and set by map picker (not validated here)
     'lot_size_sqft',
-    'lot_size_acres',
-    'current_usage',
-    'zoning_description',
-    'available_build_sqft',
     'build_area_notes',
-  ] as const,
-  3: [
-    'owns_property_free_clear',
-    'willing_to_ground_lease',
-    'has_mortgage',
-    'mortgage_balance',
-    'assessed_value',
-    'existing_debt_amount',
-    'expects_sanctuary_replacement',
-    'sanctuary_replacement_cost_estimate',
-  ] as const,
-  4: [
-    'congregation_voted',
-    'vote_percentage',
-    'leadership_support',
-    'denomination_approval_needed',
-    'decision_making_authority',
-    'decision_timeline',
-    'accepts_60_40_ownership',
-    'willing_to_pay_deposit',
-  ] as const,
-  5: [
-    'current_parking_spaces',
-    'parking_spaces_needed_after',
-    'special_requirements',
-  ] as const,
-  6: [
-    'timeline_preference',
-    'preferred_unit_count',
-    'affordability_target',
-    'revenue_sharing_preference',
-    'development_involvement_level',
+    'zoning_description',
   ] as const,
 };
 
 const STEPS = [
-  { id: 1, name: 'Church Information', component: Section1ChurchInfo },
+  { id: 1, name: 'Contact Information', component: Section1ChurchInfo },
   { id: 2, name: 'Property Details', component: Section2PropertyDetails },
-  { id: 3, name: 'Ownership & Financial', component: Section3Ownership },
-  { id: 4, name: 'Congregation Approval', component: Section4Approval },
-  { id: 5, name: 'Parking & Development', component: Section5Parking },
-  { id: 6, name: 'Timeline & Preferences', component: Section6Timeline },
 ];
 
 // Utility to clean form data for enums and numbers (matches backend expectations)
@@ -358,6 +306,18 @@ export function MultiStepSubmissionForm() {
       fixedData.longitude = null;
     }
 
+    // Normalize website URL - add https:// if missing
+    if (fixedData.website && typeof fixedData.website === 'string') {
+      const website = fixedData.website.trim();
+      if (
+        website &&
+        !website.startsWith('http://') &&
+        !website.startsWith('https://')
+      ) {
+        fixedData.website = `https://${website}`;
+      }
+    }
+
     console.log('🔧 Fixed data:', fixedData);
 
     // Clean data before submit to avoid "" for enums/optionals
@@ -457,13 +417,13 @@ export function MultiStepSubmissionForm() {
             Step {currentStep} of {STEPS.length}
           </span>
           <span>
-            {Math.round((currentStep / STEPS.length) * 100)}% Complete
+            {Math.round(((currentStep - 1) / STEPS.length) * 100)}% Complete
           </span>
         </div>
         <div className='mt-2 h-2 w-full overflow-hidden rounded-full bg-gray-200'>
           <div
             className='h-full bg-blue-500 transition-all duration-300'
-            style={{ width: `${(currentStep / STEPS.length) * 100}%` }}
+            style={{ width: `${((currentStep - 1) / STEPS.length) * 100}%` }}
           />
         </div>
       </div>

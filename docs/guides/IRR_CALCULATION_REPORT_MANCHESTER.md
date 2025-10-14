@@ -12,7 +12,7 @@
 **Assessment ID:** #50  
 **Project Type:** 4-Story Affordable Multifamily Housing
 
-### Key Results (UPDATED per CIO Feedback - NO Tax Credits)
+### Key Results (UPDATED per Manager Feedback - NO Tax Credits)
 
 - **IRR WITHOUT Tax Credits:** 23.03%
 - **Meets LOGOS 20% Target:** ✅ YES (15% above target)
@@ -52,7 +52,7 @@ Total buildable = 7,293 × 4 = 29,172 sq ft
 Units = 29,172 ÷ 481 = 60.6 ≈ 62 units ✅
 ```
 
-**Unit Mix Assumption (UPDATED per CIO feedback):**
+**Unit Mix Assumption (UPDATED per manager feedback):**
 
 - 20% studios (~325 sq ft) = 12 units
 - 55% 1-bedroom (~450 sq ft) = 34 units
@@ -90,7 +90,7 @@ Units = 29,172 ÷ 481 = 60.6 ≈ 62 units ✅
 
 ## 3. REMOVED: TAX BENEFITS ANALYSIS
 
-**Per CIO Feedback:** LIHTC tax credits and CA Welfare Exemption have been **removed** from the financial model.
+**Per Manger Feedback:** LIHTC tax credits and CA Welfare Exemption have been **removed** from the financial model.
 
 - ❌ NO LIHTC 4% federal tax credits
 - ❌ NO California state tax credits
@@ -103,7 +103,7 @@ The IRR calculation now reflects a **conventional financing structure** without 
 
 ## 4. REVENUE PROJECTIONS
 
-### 4.1 Annual Operating Income (UPDATED per CIO feedback)
+### 4.1 Annual Operating Income (UPDATED per Manager feedback)
 
 **Rental Income** (HUD FMR 2026 - Los Angeles County):
 
@@ -125,9 +125,9 @@ Annual OpEx = $1,602,072 × 0.30 = $480,622
 NOI = Revenue - OpEx = $1,602,072 - $480,622 = $1,121,450/year
 ```
 
-**Note:** Property tax exemption removed per CIO feedback (no additional NOI boost)
+**Note:** Property tax exemption removed per Manager feedback (no additional NOI boost)
 
-### 4.2 Revenue Growth Assumptions (UPDATED per CIO feedback)
+### 4.2 Revenue Growth Assumptions (UPDATED per Manager feedback)
 
 - **Annual rent growth:** 3% (conservative)
 - **Occupancy:** 100% (Section 8 vouchers)
@@ -139,7 +139,7 @@ NOI = Revenue - OpEx = $1,602,072 - $480,622 = $1,121,450/year
 
 ### 5.1 Cash Flow Structure (UPDATED: 8-Year Hold)
 
-**Timeline (UPDATED per CIO feedback):**
+**Timeline (UPDATED per Manager feedback):**
 
 - **Years 0-1:** Construction (18 months)
 - **Year 2:** Construction complete + Lease-up (4 months) + Stabilization (8 months NOI)
@@ -207,7 +207,7 @@ Timeframe: 7 years (vs 11 years with LIHTC)
 
 ---
 
-## 6. SENSITIVITY ANALYSIS (UPDATED per CIO Feedback)
+## 6. SENSITIVITY ANALYSIS (UPDATED per Manager Feedback)
 
 ### 6.1 Key Assumptions & Sensitivities
 
@@ -320,7 +320,7 @@ Timeframe: 7 years (vs 11 years with LIHTC)
 **Code Location:** `backend/app/services/ai_assessment.py`  
 **Function:** `_calculate_project_irr_with_tax_benefits()`
 
-**Key Steps (UPDATED per CIO feedback):**
+**Key Steps (UPDATED per Manager feedback):**
 
 1. Calculate unit capacity with new unit mix (20% studios, 55% 1BD, 25% 2BD)
 2. Calculate revenue with 30% operating expense ratio
@@ -420,7 +420,7 @@ Exceeds target by: +15% ✅
 
 ## 11. CONCLUSION
 
-### 11.1 Summary (UPDATED per CIO Feedback)
+### 11.1 Summary (UPDATED per Manager Feedback)
 
 The Manchester property (709 W Manchester Ave) demonstrates **good** financial viability for LOGOS Faith Development's affordable housing model:
 
@@ -472,7 +472,7 @@ The IRR of **23.03%** is achieved without tax subsidies, making it more sustaina
 **Cost Data:**
 
 - RSMeans 2025: Construction costs
-- Industry benchmarks: Operating expenses (updated to 30% per CIO feedback)
+- Industry benchmarks: Operating expenses (updated to 30% per Manager feedback)
 
 ---
 

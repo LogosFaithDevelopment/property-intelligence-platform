@@ -78,11 +78,11 @@ export default function AdminLayout({
                     className='object-contain w-full h-full'
                   />
                 </div>
-                <div className='flex flex-col gap-0'>
-                  <div className='font-bold text-lg font-[family-name:var(--font-safe-light-accent)] leading-none'>
+                <div className='flex flex-col gap-0.5'>
+                  <div className='font-bold text-lg font-[family-name:var(--font-safe-light-accent)] leading-tight'>
                     Logos Admin
                   </div>
-                  <div className='text-xs text-gray-500 leading-none -mt-0.5'>
+                  <div className='text-xs text-gray-500 leading-tight'>
                     Property Management
                   </div>
                 </div>

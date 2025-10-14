@@ -36,6 +36,7 @@ class DashboardStats(BaseModel):
     total_churches: int
     total_properties: int
     avg_score: Optional[float]
+    scheduled_meetings: int
     status_breakdown: List[StatusCount]
 
 
@@ -72,14 +73,22 @@ async def get_dashboard_stats(
     Requires admin role
     """
     
-    # Total submissions
-    total_result = await db.execute(select(func.count(Assessment.id)))
+    # Total submissions (excluding drafts)
+    total_result = await db.execute(
+        select(func.count(Assessment.id)).where(
+            Assessment.status != AssessmentStatus.DRAFT
+        )
+    )
     total_submissions = total_result.scalar() or 0
     
-    # Pending submissions (submitted + processing)
+    # Pending submissions (awaiting admin review/action - excluding drafts and processing)
     pending_result = await db.execute(
         select(func.count(Assessment.id)).where(
-            Assessment.status.in_([AssessmentStatus.SUBMITTED, AssessmentStatus.PROCESSING])
+            Assessment.status.in_([
+                AssessmentStatus.SUBMITTED,
+                AssessmentStatus.COMPLETED,
+                AssessmentStatus.REVIEWED
+            ])
         )
     )
     pending_submissions = pending_result.scalar() or 0
@@ -139,6 +148,9 @@ async def get_dashboard_stats(
         for status, count in status_result.all()
     ]
     
+    # Scheduled meetings (placeholder - set to 0 for now, can be updated when meeting scheduling is implemented)
+    scheduled_meetings = 0
+    
     return DashboardStats(
         total_submissions=total_submissions,
         pending_submissions=pending_submissions,
@@ -148,6 +160,7 @@ async def get_dashboard_stats(
         total_churches=total_churches,
         total_properties=total_properties,
         avg_score=avg_score,
+        scheduled_meetings=scheduled_meetings,
         status_breakdown=status_breakdown
     )
 
@@ -395,6 +408,10 @@ class AssessmentDetail(BaseModel):
     property_additional_addresses: Optional[List[Dict[str, Any]]]  # Additional addresses with enriched data
     property_demolish_all_structures: Optional[bool]
     
+    # Assessment custom fields (user-provided values)
+    available_build_sqft: Optional[float]
+    available_build_acres: Optional[float]
+    
     class Config:
         from_attributes = True
 
@@ -466,6 +483,9 @@ async def get_submission_detail(
             Property.year_built.label("property_year_built"),
             Property.additional_addresses.label("property_additional_addresses"),
             Property.demolish_all_structures.label("property_demolish_all_structures"),
+            # Assessment user inputs
+            Assessment.available_build_sqft,
+            Assessment.available_build_acres,
         )
         .join(Church, Assessment.church_id == Church.id)
         .join(Property, Assessment.property_id == Property.id)
@@ -534,4 +554,7 @@ async def get_submission_detail(
         property_year_built=row.property_year_built,
         property_additional_addresses=row.property_additional_addresses,
         property_demolish_all_structures=row.property_demolish_all_structures,
+        # Assessment custom fields
+        available_build_sqft=row.available_build_sqft,
+        available_build_acres=row.available_build_acres,
     )

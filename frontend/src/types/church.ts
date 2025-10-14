@@ -5,10 +5,8 @@
 
 // Entity Type Options (maps to tax_exempt_status in backend)
 export const ENTITY_TYPE_OPTIONS = [
-  '501(c)(3) Nonprofit',
-  'Religious Corporation',
-  'Church/Religious Organization',
-  'Unincorporated Association',
+  'For Profit Company',
+  'Faith Based Organization',
   'Other',
 ] as const;
 

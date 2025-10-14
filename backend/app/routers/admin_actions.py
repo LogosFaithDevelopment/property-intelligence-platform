@@ -5,6 +5,7 @@ Handles admin actions on submissions: approve, reject, add comments, change stat
 
 from datetime import datetime
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from app.database import get_db
 from app.models.admin_user import AdminRole, AdminUser
@@ -14,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 router = APIRouter(prefix="/api/v1/admin/submissions", tags=["admin-actions"])
 
@@ -46,13 +48,25 @@ class SubmissionResponse(BaseModel):
     reviewer_notes: Optional[str]
 
 
+# Helper function to format timestamp in Pacific time
+def get_pacific_timestamp() -> str:
+    """Get current timestamp formatted in Pacific timezone (PST/PDT)"""
+    pacific_tz = ZoneInfo("America/Los_Angeles")
+    now_pacific = datetime.now(pacific_tz)
+    # Determine if we're in PST or PDT
+    tz_name = now_pacific.strftime('%Z')  # Will be PST or PDT
+    return now_pacific.strftime(f'%Y-%m-%d %H:%M {tz_name}')
+
+
 # Helper function to get submission
 async def get_submission_or_404(
     submission_id: int,
     db: AsyncSession
 ) -> Assessment:
     result = await db.execute(
-        select(Assessment).where(Assessment.id == submission_id)
+        select(Assessment)
+        .options(selectinload(Assessment.property_obj))
+        .where(Assessment.id == submission_id)
     )
     submission = result.scalar_one_or_none()
     
@@ -90,7 +104,7 @@ async def approve_submission(
     submission.updated_at = datetime.utcnow()
     
     # Add reviewer notes
-    admin_note = f"✅ Approved by {admin.full_name or admin.email} on {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}"
+    admin_note = f"✅ Approved by {admin.full_name or admin.email} on {get_pacific_timestamp()}"
     if request.notes:
         admin_note += f"\nNotes: {request.notes}"
     
@@ -104,7 +118,7 @@ async def approve_submission(
     
     return SubmissionResponse(
         id=submission.id,
-        property_address=submission.property_address,
+        property_address=submission.property_obj.street_address if submission.property_obj else "N/A",
         status=submission.status.value,
         created_at=submission.created_at,
         updated_at=submission.updated_at,
@@ -137,7 +151,7 @@ async def reject_submission(
     submission.updated_at = datetime.utcnow()
     
     # Add reviewer notes with rejection reason
-    admin_note = f"❌ Rejected by {admin.full_name or admin.email} on {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}"
+    admin_note = f"❌ Rejected by {admin.full_name or admin.email} on {get_pacific_timestamp()}"
     admin_note += f"\nReason: {request.reason}"
     if request.notes:
         admin_note += f"\nNotes: {request.notes}"
@@ -152,7 +166,7 @@ async def reject_submission(
     
     return SubmissionResponse(
         id=submission.id,
-        property_address=submission.property_address,
+        property_address=submission.property_obj.street_address if submission.property_obj else "N/A",
         status=submission.status.value,
         created_at=submission.created_at,
         updated_at=submission.updated_at,
@@ -174,7 +188,7 @@ async def add_comment(
     submission = await get_submission_or_404(submission_id, db)
     
     # Add comment
-    comment = f"💬 {admin.full_name or admin.email} ({datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}): {request.comment}"
+    comment = f"💬 {admin.full_name or admin.email} ({get_pacific_timestamp()}): {request.comment}"
     
     if submission.reviewer_notes:
         submission.reviewer_notes += f"\n\n{comment}"
@@ -188,7 +202,7 @@ async def add_comment(
     
     return SubmissionResponse(
         id=submission.id,
-        property_address=submission.property_address,
+        property_address=submission.property_obj.street_address if submission.property_obj else "N/A",
         status=submission.status.value,
         created_at=submission.created_at,
         updated_at=submission.updated_at,
@@ -230,7 +244,7 @@ async def change_status(
     submission.updated_at = datetime.utcnow()
     
     # Add reviewer notes
-    admin_note = f"🔄 Status changed by {admin.full_name or admin.email} on {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}"
+    admin_note = f"🔄 Status changed by {admin.full_name or admin.email} on {get_pacific_timestamp()}"
     admin_note += f"\nFrom: {old_status.value} → To: {new_status.value}"
     if request.notes:
         admin_note += f"\nNotes: {request.notes}"
@@ -245,7 +259,7 @@ async def change_status(
     
     return SubmissionResponse(
         id=submission.id,
-        property_address=submission.property_address,
+        property_address=submission.property_obj.street_address if submission.property_obj else "N/A",
         status=submission.status.value,
         created_at=submission.created_at,
         updated_at=submission.updated_at,

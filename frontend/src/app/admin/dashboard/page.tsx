@@ -30,6 +30,7 @@ interface DashboardStats {
   total_churches: number;
   total_properties: number;
   avg_score: number | null;
+  scheduled_meetings: number;
 }
 
 interface RecentSubmission {
@@ -51,47 +52,63 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function fetchDashboardData() {
-      try {
-        const token = await getToken();
-        if (!token) return;
+  const fetchDashboardData = async () => {
+    try {
+      const token = await getToken();
+      if (!token) return;
 
-        // Fetch stats
-        const statsRes = await fetch(
-          'http://localhost:8000/api/v1/admin/stats/dashboard',
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
-
-        if (statsRes.ok) {
-          const statsData = await statsRes.json();
-          setStats(statsData);
+      // Fetch stats
+      const statsRes = await fetch(
+        'http://localhost:8000/api/v1/admin/stats/dashboard',
+        {
+          headers: { Authorization: `Bearer ${token}` },
         }
+      );
 
-        // Fetch recent submissions
-        const recentRes = await fetch(
-          'http://localhost:8000/api/v1/admin/stats/recent-submissions?limit=5',
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
-
-        if (recentRes.ok) {
-          const recentData = await recentRes.json();
-          setRecentSubmissions(recentData);
-        }
-
-        setLoading(false);
-      } catch (err) {
-        console.error('Error fetching dashboard data:', err);
-        setError('Failed to load dashboard data');
-        setLoading(false);
+      if (statsRes.ok) {
+        const statsData = await statsRes.json();
+        setStats(statsData);
       }
-    }
 
+      // Fetch recent submissions
+      const recentRes = await fetch(
+        'http://localhost:8000/api/v1/admin/stats/recent-submissions?limit=5',
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      if (recentRes.ok) {
+        const recentData = await recentRes.json();
+        setRecentSubmissions(recentData);
+      }
+
+      setLoading(false);
+    } catch (err) {
+      console.error('Error fetching dashboard data:', err);
+      setError('Failed to load dashboard data');
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchDashboardData();
+
+    // Refetch data every 30 seconds
+    const interval = setInterval(fetchDashboardData, 30000);
+
+    // Refetch when page becomes visible
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        fetchDashboardData();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [getToken]);
 
   if (loading) {
@@ -122,7 +139,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Stats Grid */}
-      <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8'>
+      <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8'>
         <Card>
           <CardHeader className='flex flex-row items-center justify-between pb-2'>
             <CardTitle className='text-sm font-medium text-gray-600'>
@@ -156,30 +173,15 @@ export default function AdminDashboard() {
         <Card>
           <CardHeader className='flex flex-row items-center justify-between pb-2'>
             <CardTitle className='text-sm font-medium text-gray-600'>
-              Processing
+              Properties
             </CardTitle>
-            <TrendingUp className='h-4 w-4 text-blue-600' />
+            <Users className='h-4 w-4 text-purple-600' />
           </CardHeader>
           <CardContent>
-            <div className='text-3xl font-bold text-blue-600'>
-              {stats?.processing_submissions || 0}
+            <div className='text-3xl font-bold text-purple-600'>
+              {stats?.total_properties || 0}
             </div>
-            <p className='text-xs text-gray-500 mt-1'>In progress</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className='flex flex-row items-center justify-between pb-2'>
-            <CardTitle className='text-sm font-medium text-gray-600'>
-              Approved
-            </CardTitle>
-            <CheckCircle className='h-4 w-4 text-green-600' />
-          </CardHeader>
-          <CardContent>
-            <div className='text-3xl font-bold text-green-600'>
-              {stats?.approved_submissions || 0}
-            </div>
-            <p className='text-xs text-gray-500 mt-1'>Ready to proceed</p>
+            <p className='text-xs text-gray-500 mt-1'>Total registered</p>
           </CardContent>
         </Card>
       </div>
@@ -204,30 +206,30 @@ export default function AdminDashboard() {
         <Card>
           <CardHeader className='flex flex-row items-center justify-between pb-2'>
             <CardTitle className='text-sm font-medium text-gray-600'>
-              Churches
+              Approved
             </CardTitle>
-            <Users className='h-4 w-4 text-purple-600' />
+            <CheckCircle className='h-4 w-4 text-green-600' />
           </CardHeader>
           <CardContent>
-            <div className='text-3xl font-bold text-purple-600'>
-              {stats?.total_churches || 0}
+            <div className='text-3xl font-bold text-green-600'>
+              {stats?.approved_submissions || 0}
             </div>
-            <p className='text-xs text-gray-500 mt-1'>Total registered</p>
+            <p className='text-xs text-gray-500 mt-1'>Ready to proceed</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className='flex flex-row items-center justify-between pb-2'>
             <CardTitle className='text-sm font-medium text-gray-600'>
-              Average Score
+              Scheduled Meetings
             </CardTitle>
-            <TrendingUp className='h-4 w-4 text-indigo-600' />
+            <Users className='h-4 w-4 text-indigo-600' />
           </CardHeader>
           <CardContent>
             <div className='text-3xl font-bold text-indigo-600'>
-              {stats?.avg_score?.toFixed(1) || 'N/A'}
+              {stats?.scheduled_meetings || 0}
             </div>
-            <p className='text-xs text-gray-500 mt-1'>Out of 100</p>
+            <p className='text-xs text-gray-500 mt-1'>Upcoming calls</p>
           </CardContent>
         </Card>
       </div>
@@ -282,17 +284,19 @@ export default function AdminDashboard() {
                       )}
                       <div>
                         <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            submission.status === 'APPROVED'
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                            submission.status.toLowerCase() === 'approved'
                               ? 'bg-green-100 text-green-800'
-                              : submission.status === 'REJECTED'
+                              : submission.status.toLowerCase() === 'rejected'
                               ? 'bg-red-100 text-red-800'
-                              : submission.status === 'PROCESSING'
-                              ? 'bg-blue-100 text-blue-800'
                               : 'bg-yellow-100 text-yellow-800'
                           }`}
                         >
-                          {submission.status}
+                          {submission.status.toLowerCase() === 'approved'
+                            ? 'Approved'
+                            : submission.status.toLowerCase() === 'rejected'
+                            ? 'Rejected'
+                            : 'Pending'}
                         </span>
                       </div>
                     </div>

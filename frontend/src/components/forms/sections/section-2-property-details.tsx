@@ -52,16 +52,10 @@ export function Section2PropertyDetails({
     parcel_number?: string;
   } | null>(null);
 
-  const lotSize = form.watch('lot_size_sqft');
-  const availableBuildSpace = form.watch('available_build_sqft');
   const propertyAddress = form.watch('property_address');
   const propertyCity = form.watch('property_city');
   const propertyState = form.watch('property_state');
   const propertyZip = form.watch('property_zip_code');
-
-  // Check if available build space is less than total lot
-  const hasConstraints =
-    lotSize && availableBuildSpace && availableBuildSpace < lotSize;
 
   // Handler to fetch property data from LA County API (including additional addresses)
   const handleFetchPropertyData = async () => {
@@ -261,9 +255,6 @@ export function Section2PropertyDetails({
     }
   };
 
-  // Warning if build space is small
-  const showWarning = availableBuildSpace && availableBuildSpace < 10000;
-
   // Track additional addresses
   const additionalAddresses = form.watch('additional_addresses') || [];
 
@@ -293,14 +284,8 @@ export function Section2PropertyDetails({
               </FormControl>
               <div className='space-y-1 leading-none'>
                 <FormLabel className='text-base font-semibold'>
-                  Do you plan on knocking down all existing structures on your
-                  property?
+                  Are you ok with demolishing all structures at your site?
                 </FormLabel>
-                <FormDescription>
-                  If yes, we'll calculate available build space using the total
-                  lot size. If no, we'll subtract existing building areas from
-                  the lot size.
-                </FormDescription>
               </div>
             </FormItem>
           )}
@@ -605,112 +590,15 @@ export function Section2PropertyDetails({
               </FormItem>
             )}
           />
-
-          <FormField
-            control={form.control}
-            name='lot_size_acres'
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Lot Size (acres)</FormLabel>
-                <FormControl>
-                  <Input
-                    type='number'
-                    step='0.01'
-                    placeholder='Calculated automatically'
-                    {...field}
-                    disabled
-                    value={field.value?.toFixed(2) || ''}
-                  />
-                </FormControl>
-                <FormDescription>Calculated from square feet</FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
         </div>
 
-        {/* 🔥 NEW FIELD: Available Build Space (optional) */}
-        <FormField
-          control={form.control}
-          name='available_build_sqft'
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel className='flex items-center gap-2'>
-                Available Build Space (sq ft)
-                <div className='group relative'>
-                  <InfoIcon className='h-4 w-4 text-muted-foreground' />
-                  <div className='absolute left-0 bottom-full mb-2 hidden group-hover:block w-80 p-3 bg-popover text-popover-foreground text-sm rounded-md shadow-md border z-10'>
-                    <p className='font-semibold mb-2'>
-                      When to use this field:
-                    </p>
-                    <p className='mb-2'>
-                      If only part of your property can be developed (e.g.,
-                      existing building, parking, memorial garden), enter the
-                      buildable area here.
-                    </p>
-                    <p className='text-xs text-muted-foreground'>
-                      Example: Total lot 50,000 sqft, but 20,000 sqft has
-                      existing church building, so available = 30,000 sqft
-                    </p>
-                  </div>
-                </div>
-              </FormLabel>
-              <FormControl>
-                <Input
-                  type='number'
-                  placeholder='Leave this blank if you do not know the exact build space available'
-                  {...field}
-                  value={
-                    field.value === undefined ||
-                    field.value === null ||
-                    isNaN(field.value)
-                      ? ''
-                      : String(field.value)
-                  }
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    field.onChange(val === '' ? undefined : Number(val));
-                  }}
-                />
-              </FormControl>
-              <FormDescription>
-                Only fill this if the buildable area is less than total lot size
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        {/* Show helpful info when available build space differs from lot size */}
-        {hasConstraints && (
-          <Alert>
-            <InfoIcon className='h-4 w-4' />
-            <AlertDescription>
-              Using {availableBuildSpace?.toLocaleString()} sqft for buildable
-              area instead of total lot size ({lotSize?.toLocaleString()} sqft).
-              This will be used to calculate unit capacity.
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {/* Warning if build space is small */}
-        {showWarning && (
-          <Alert variant='destructive'>
-            <AlertTriangle className='h-4 w-4' />
-            <AlertDescription>
-              Warning: Build space less than 10,000 sqft may not meet the
-              minimum requirement for 40+ units
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {/* 🔥 NEW FIELD: Build Area Notes (optional textarea) */}
+        {/* Special Considerations (optional textarea) */}
         <FormField
           control={form.control}
           name='build_area_notes'
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Build Area Notes</FormLabel>
+              <FormLabel>Special Considerations</FormLabel>
               <FormControl>
                 <Textarea
                   placeholder="Describe any constraints or special considerations (e.g., 'Southeast corner available', 'Preserve existing memorial garden', 'Parking lot can be redeveloped')"
@@ -723,28 +611,6 @@ export function Section2PropertyDetails({
               <FormDescription>
                 {field.value?.length || 0}/500 characters - Explain any site
                 constraints or areas to preserve
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        {/* Current Usage */}
-        <FormField
-          control={form.control}
-          name='current_usage'
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Current Property Usage</FormLabel>
-              <FormControl>
-                <Input
-                  placeholder='e.g., Vacant land, Parking lot, Old building'
-                  {...field}
-                  value={field.value ?? ''}
-                />
-              </FormControl>
-              <FormDescription>
-                What is the property currently being used for?
               </FormDescription>
               <FormMessage />
             </FormItem>
