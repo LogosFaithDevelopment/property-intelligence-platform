@@ -162,17 +162,16 @@ class AIAssessmentService:
         Weights (must sum to 100%):
         - Financial Viability: 30%
         - Market Demand: 25%
-        - Location Quality: 20%
-        - Partnership Alignment: 15%
-        - Risk Assessment: 10%
+        - Location Quality: 0% (informational only)
+        - Partnership Alignment: 0% (informational only)
+        - Risk Assessment: 0% (informational only)
+        
+        Updated Oct 2025: Financial score is now 100% of total score.
+        Other scores are still calculated but don't affect pass/fail decision.
         """
-        overall = (
-            (financial_score * 0.30) +  # 30% weight
-            (market_score * 0.25) +      # 25% weight
-            (location_score * 0.20) +    # 20% weight
-            (partnership_score * 0.15) + # 15% weight
-            (risk_score * 0.10)          # 10% weight
-        )
+        # Updated Oct 2025: Financial viability is 100% of the score
+        # Other factors are informational but don't affect pass/fail
+        overall = financial_score  # 100% weight on financial viability
         
         # Ensure score is within valid range
         return max(0, min(100, overall))
@@ -713,25 +712,26 @@ Provide a market demand score (0-100) and brief analysis."""
             )
             logger.warning(f"⚠️ Using total lot size: {lot_size_sqft:,} sq ft - USER CONFIRMATION REQUIRED (no building data)")
 
-        
-        if lot_size_sqft < 10000:
-            logger.warning(f"Property {property_obj.id} disqualified: {lot_size_sqft} sq ft < 10,000 sq ft minimum")
+        # Updated Oct 2025: Minimum lot size reduced from 10,000 to 5,000 sq ft
+        if lot_size_sqft < 5000:
+            logger.warning(f"Property {property_obj.id} disqualified: {lot_size_sqft} sq ft < 5,000 sq ft minimum")
             return 0.0, {
                 "score": 0.0,
                 "disqualified": True,
                 "disqualification_reason": "Below Logos minimum lot size requirement",
                 "lot_size_sqft": lot_size_sqft,
-                "minimum_required_sqft": 10000,
+                "minimum_required_sqft": 5000,
                 "using_available_space": using_available_space,
-                "note": "Property does not meet Logos Faith Development's 10,000 sq ft minimum threshold"
+                "note": "Property does not meet Logos Faith Development's 5,000 sq ft minimum threshold (updated Oct 2025)"
             }
         
         # Calculate unit capacity using the determined lot size (available space or total)
         unit_capacity_info = self._calculate_unit_capacity(property_obj, lot_size_sqft_override=lot_size_sqft)
         feasible_units = unit_capacity_info["feasible_units"]
+        stories = unit_capacity_info.get("stories", 4)  # Default to 4-story
         within_target_range = 40 <= feasible_units <= 140
         
-        cost_per_unit_info = self._estimate_cost_per_unit(property_obj, feasible_units)
+        cost_per_unit_info = self._estimate_cost_per_unit(property_obj, feasible_units, stories=stories)
         cost_per_unit = cost_per_unit_info["cost_per_unit"]
         
         # Pass property location data for geographic disaster filtering
@@ -750,10 +750,11 @@ Provide a market demand score (0-100) and brief analysis."""
         score = 75.0
         
         # BONUS: Larger available space = better score (proportional to size above minimum)
-        # Score increases for every 10,000 sqft above the minimum, up to +15 points
-        if lot_size_sqft >= 10000:
-            excess_sqft = lot_size_sqft - 10000
-            # Award 1 point per 5,000 sqft above minimum (max +15 points at 85,000 sqft)
+        # Updated Oct 2025: Minimum changed from 10,000 to 5,000 sq ft
+        # Score increases for every 5,000 sqft above the minimum, up to +15 points
+        if lot_size_sqft >= 5000:
+            excess_sqft = lot_size_sqft - 5000
+            # Award 1 point per 5,000 sqft above minimum (max +15 points at 80,000 sqft)
             size_bonus = min(15, (excess_sqft / 5000) * 1)
             if size_bonus > 0:
                 score += size_bonus
@@ -851,6 +852,13 @@ Provide a market demand score (0-100) and brief analysis."""
         total_development_cost = cost_per_unit * feasible_units
         adjusted_total_cost = adjusted_cost_per_unit * feasible_units
         
+        # Calculate Total Project Cost (display only - doesn't affect IRR)
+        # Formula: Development Cost + (Land Value - Existing Debt)
+        land_value = property_obj.assessed_value or 0
+        existing_debt = assessment.existing_debt_amount or 0
+        net_land_value = max(0, land_value - existing_debt)
+        total_project_cost = adjusted_total_cost + net_land_value
+        
         analysis = {
             "score": score,
             "disqualified": False,
@@ -892,6 +900,16 @@ Provide a market demand score (0-100) and brief analysis."""
             "adjusted_development_cost": adjusted_total_cost,
             "adjusted_development_cost_formatted": f"${adjusted_total_cost:,.0f}",
             
+            # Total Project Cost (Oct 2025): Dev Cost + Net Land Value
+            "total_project_cost": total_project_cost,
+            "total_project_cost_formatted": f"${total_project_cost:,.0f}",
+            "total_project_cost_breakdown": {
+                "development_cost": adjusted_total_cost,
+                "land_value": land_value,
+                "existing_debt": existing_debt,
+                "net_land_value": net_land_value
+            },
+            
             "revenue_projections": revenue_projections,
             "multi_story_scenarios": multi_story_scenarios,  # NEW: 3/4/5 story comparison
             
@@ -911,6 +929,7 @@ Provide a market demand score (0-100) and brief analysis."""
                 "No LIHTC (private funding model)",
                 "Church retains land ownership",
                 "Zero land acquisition cost",
+                f"Total Project Cost: ${total_project_cost:,.0f} (Dev Cost + Net Land Value)",
                 f"Flood mitigation adds ${flood_cost_per_unit:,}/unit" if flood_cost_per_unit > 0 else "No flood mitigation required",
                 f"Existing debt: ${assessment.existing_debt_amount:,.0f} ({debt_to_value_ratio:.1%} of value)" if assessment.existing_debt_amount and debt_to_value_ratio else "No existing debt",
                 "Church expects sanctuary replacement" if assessment.expects_sanctuary_replacement else "No sanctuary replacement expected"
@@ -1034,28 +1053,37 @@ Provide a market demand score (0-100) and brief analysis."""
             units = scenario_data["feasible_units"]
             stories = scenario_data["stories"]
             
-            # Calculate costs for this scenario
-            cost_info = self._estimate_cost_per_unit(property_obj, units)
+            # Calculate costs for this scenario (pass stories for tiered costs)
+            cost_info = self._estimate_cost_per_unit(property_obj, units, stories=stories)
             base_cost_per_unit = cost_info["cost_per_unit"]
             adjusted_cost_per_unit = base_cost_per_unit + flood_cost_per_unit
             total_dev_cost = adjusted_cost_per_unit * units
+            
+            # Get tiered construction months for this unit count
+            construction_months = self._get_construction_months(units)
             
             # Calculate revenue projections for this scenario
             revenue = self._calculate_revenue_projections(
                 enrichment_data,
                 units,
-                adjusted_cost_per_unit
+                adjusted_cost_per_unit,
+                construction_months=construction_months
             )
             
             noi = revenue.get("net_operating_income", 0)
             irr_percent = revenue.get("irr_percent", 0)
             equity_required = total_dev_cost * 0.20  # CIO updated: 20% equity
             
+            # Determine if scenario is not recommended (IRR < 10%)
+            not_recommended = irr_percent is not None and irr_percent < 10.0
+            recommendation_warning = "⚠️ Not Recommended (IRR < 10%)" if not_recommended else None
+            
             scenario_financials[scenario_name] = {
                 "stories": stories,
                 "units": units,
                 "buildable_sqft": scenario_data["buildable_sqft"],
                 "cost_per_unit": adjusted_cost_per_unit,
+                "construction_months": construction_months,
                 "total_development_cost": total_dev_cost,
                 "total_development_cost_formatted": f"${total_dev_cost:,.0f}",
                 "equity_required": equity_required,
@@ -1069,7 +1097,9 @@ Provide a market demand score (0-100) and brief analysis."""
                 "irr_percent": irr_percent,
                 "cap_rate": revenue.get("cap_rate", 0),
                 "cash_on_cash": revenue.get("cash_on_cash_return", 0),
-                "meets_irr_target": irr_percent >= 20.0 if irr_percent else False
+                "meets_irr_target": irr_percent >= 20.0 if irr_percent else False,
+                "not_recommended": not_recommended,
+                "recommendation_warning": recommendation_warning
             }
             
             # Track best IRR
@@ -1086,9 +1116,13 @@ Provide a market demand score (0-100) and brief analysis."""
             "recommended": recommended,
             "recommended_reason": f"Best IRR at {best_irr:.1f}%" if best_irr > 0 else "Standard 4-story configuration",
             "notes": [
-                "Financial Model: $325K/unit, 425 sqft avg, 20% equity/80% debt",
+                "Financial Model (Oct 2025): Tiered costs by height",
+                "3-story: $275K/unit, 4-story: $325K/unit, 5-story: $415K/unit",
+                "Tiered developer fees: 8%/7%/6%/5% by scale",
+                "Tiered construction: 18/24/32 months by scale",
+                "425 sqft avg unit, 20% equity/65% permanent loan, tiered brokerage (2.0%-5.0%)",
                 "All scenarios assume 65% site coverage",
-                "Unit mix: 20% studios, 55% 1BD, 25% 2BD",
+                "Unit mix: 10% studios, 80% 1BD, 10% 2BD",
                 f"Recommended: {recommended.replace('_', ' ').title()} with {best_irr:.1f}% IRR"
             ]
         }
@@ -1097,7 +1131,8 @@ Provide a market demand score (0-100) and brief analysis."""
         self,
         enrichment_data: Dict[str, Any],
         unit_count: int,
-        cost_per_unit: float
+        cost_per_unit: float,
+        construction_months: Optional[int] = None
     ) -> Dict[str, Any]:
         """
         Calculate revenue projections using actual HUD Fair Market Rent data
@@ -1108,24 +1143,40 @@ Provide a market demand score (0-100) and brief analysis."""
         - Net Operating Income (NOI)
         - Return on Investment (ROI)
         - Cash-on-cash return
+        
+        Args:
+            construction_months: Optional construction timeline (tiered: 18/24/32 months)
         """
         
         fmr_data = enrichment_data.get("fair_market_rent", {})
         
+        # AMI-based fallback defaults (Oct 2025) when HUD FMR API fails
+        fallback_rents = {
+            "studio": 1450,
+            "1_bedroom": 1800,
+            "2_bedroom": 2400
+        }
+        
         if not fmr_data or not fmr_data.get("success"):
-            return {
-                "status": "no_data",
-                "message": "FMR data not available - revenue projections are estimates",
-                "estimated_revenue": "Contact local Housing Authority for Section 8 payment standards"
-            }
+            # Use fallback values
+            rent_by_bedroom = fallback_rents
+            data_source = "AMI-based fallback defaults"
+            logger.warning("HUD FMR data unavailable - using AMI fallback rents")
+        else:
+            rent_by_bedroom = fmr_data.get("rent_by_bedroom", {})
+            data_source = f"HUD FMR {fmr_data.get('year', 'N/A')}"
+            
+            # Apply fallback for any missing bedroom types
+            for bedroom_type, fallback_rent in fallback_rents.items():
+                if not rent_by_bedroom.get(bedroom_type):
+                    rent_by_bedroom[bedroom_type] = fallback_rent
+                    logger.warning(f"Missing {bedroom_type} FMR - using fallback ${fallback_rent}")
         
-        rent_by_bedroom = fmr_data.get("rent_by_bedroom", {})
-        
-        # Updated unit mix per CIO feedback: 20% studios, 55% 1BD, 25% 2BD
+        # Updated unit mix per CIO feedback: 10% studios, 80% 1BD, 10% 2BD
         unit_mix = {
-            "studio": {"count": int(unit_count * 0.20), "fmr": rent_by_bedroom.get("studio", 0)},
-            "1_bedroom": {"count": int(unit_count * 0.55), "fmr": rent_by_bedroom.get("1_bedroom", 0)},
-            "2_bedroom": {"count": int(unit_count * 0.25), "fmr": rent_by_bedroom.get("2_bedroom", 0)}
+            "studio": {"count": int(unit_count * 0.10), "fmr": rent_by_bedroom.get("studio", 0)},
+            "1_bedroom": {"count": int(unit_count * 0.80), "fmr": rent_by_bedroom.get("1_bedroom", 0)},
+            "2_bedroom": {"count": int(unit_count * 0.10), "fmr": rent_by_bedroom.get("2_bedroom", 0)}
         }
         
         annual_revenue = 0
@@ -1159,17 +1210,22 @@ Provide a market demand score (0-100) and brief analysis."""
         equity_investment = total_cost * 0.20
         cash_on_cash = (noi / equity_investment * 100) if equity_investment > 0 else 0
         
+        # Get tiered construction months if not provided
+        if construction_months is None:
+            construction_months = self._get_construction_months(unit_count)
+        
         # Calculate IRR (LOGOS target: 20%) with updated methodology
         irr_analysis = self._calculate_project_irr_with_tax_benefits(
             total_dev_cost=total_cost,
             annual_noi=noi,
             unit_count=unit_count,
-            assessed_value=total_cost  # Use development cost as assessed value
+            assessed_value=total_cost,  # Use development cost as assessed value
+            construction_months=construction_months  # Pass tiered construction timeline
         )
         
         return {
             "status": "calculated",
-            "data_source": f"HUD FMR {fmr_data.get('year', 'N/A')}",
+            "data_source": data_source,
             "unit_mix": unit_mix,
             "revenue_by_unit_type": revenue_by_type,
             "total_annual_revenue": annual_revenue,
@@ -1188,21 +1244,51 @@ Provide a market demand score (0-100) and brief analysis."""
             "irr_percent": irr_analysis.get("irr_percent"),
             "meets_irr_target": irr_analysis.get("meets_logos_target", False),
             "assumptions": [
-                "20% studios, 55% 1BR, 25% 2BR unit mix",
+                "10% studios, 80% 1BR, 10% 2BR unit mix",
                 "30% operating expense ratio",
                 "100% occupancy (conservative for Section 8)",
-                "20% equity / 80% debt financing (Updated Oct 2025)",
-                "$325K per unit construction cost",
+                "20% equity / 65% permanent loan (Updated Oct 2025)",
+                "Tiered construction costs: 3-story $275K, 4-story $325K, 5-story $415K",
                 "425 sqft average unit size"
             ],
             "notes": [
                 "Actual FMR may vary by ZIP code within county",
                 "IRR calculation WITHOUT tax credits",
                 "Operating expense ratio: 30% (reduced from 42%)",
-                "Construction: 18 months, Lease-up: 4 months, Exit: Year 7, Exit cap: 6%",
-                "Updated Financial Model (Oct 2025): $325K/unit, 425 sqft, 20% equity/80% debt"
+                "Construction: 18-32 months (tiered), Lease-up: 4 months, Exit: Year 7, Exit cap: 6%",
+                "Updated Financial Model (Oct 2025): Tiered costs $275K/$325K/$415K, 425 sqft, 20% equity/65% permanent loan, tiered brokerage (2.0%-5.0%)"
             ]
         }
+    
+    def _get_brokerage_fee_rate(self, exit_value: float) -> tuple[float, str]:
+        """
+        Calculate tiered brokerage fee rate based on property exit value.
+        
+        Larger properties command lower broker fees due to economies of scale.
+        
+        Fee Schedule:
+        - < $10M: 5.0%
+        - $10M - $20M: 4.0%
+        - $20M - $30M: 3.0%
+        - $30M - $40M: 2.5%
+        - > $40M: 2.0%
+        
+        Args:
+            exit_value: Property exit value
+            
+        Returns:
+            Tuple of (fee_rate, tier_description)
+        """
+        if exit_value < 10_000_000:
+            return 0.050, "5.0% (under $10M)"
+        elif exit_value < 20_000_000:
+            return 0.040, "4.0% ($10M-$20M)"
+        elif exit_value < 30_000_000:
+            return 0.030, "3.0% ($20M-$30M)"
+        elif exit_value < 40_000_000:
+            return 0.025, "2.5% ($30M-$40M)"
+        else:
+            return 0.020, "2.0% (over $40M)"
     
     def _calculate_project_irr_with_tax_benefits(
         self,
@@ -1227,7 +1313,8 @@ Provide a market demand score (0-100) and brief analysis."""
         3. Construction: 18 months
         4. Exit: Year 7 (1.5 years construction + 5.5 years operation)
         5. Exit cap rate: 6%
-        6. Unit mix: 20% studios (325sf), 55% 1BD (450sf), 25% 2BD (675sf)
+        6. Unit mix: 10% studios (325sf), 80% 1BD (450sf), 10% 2BD (675sf)
+        7. Permanent loan: 65% (down from 80%)
         
         Args:
             total_dev_cost: Total development cost
@@ -1265,13 +1352,13 @@ Provide a market demand score (0-100) and brief analysis."""
         # NO CA Welfare property tax exemption
         # Simple equity-based IRR calculation
         
-        # Calculate equity requirement (CIO UPDATED: 20% equity, 80% debt)
+        # Calculate equity requirement (CIO UPDATED: 20% equity, 65% permanent loan)
         equity_required = total_dev_cost * 0.20
         
-        logger.info(f"💰 IRR Calculation (NO Tax Credits):")
+        logger.info(f"💰 IRR Calculation (NO Tax Credits - Updated Oct 2025):")
         logger.info(f"   Total Dev Cost: ${total_dev_cost:,.0f}")
         logger.info(f"   Equity Required (20%): ${equity_required:,.0f}")
-        logger.info(f"   Debt Financing (80%): ${total_dev_cost * 0.80:,.0f}")
+        logger.info(f"   Permanent Loan (65%): ${total_dev_cost * 0.65:,.0f}")
         logger.info(f"   Annual NOI: ${annual_noi:,.0f}")
         logger.info(f"   Construction Period: {construction_months} months")
         logger.info(f"   Lease-up Period: 4 months (Year 2 has 8 months NOI)")
@@ -1308,9 +1395,14 @@ Provide a market demand score (0-100) and brief analysis."""
         # Calculate exit value and proceeds
         exit_value = final_year_noi / exit_cap_rate if exit_cap_rate > 0 else 0
         
-        # Subtract remaining debt from exit proceeds (assume 70% LTV, interest-only)
-        debt_amount = total_dev_cost * 0.70
-        exit_proceeds = exit_value - debt_amount
+        # Calculate tiered brokerage fee based on property value (updated Oct 2025)
+        brokerage_rate, brokerage_tier = self._get_brokerage_fee_rate(exit_value)
+        brokerage_fee = exit_value * brokerage_rate
+        net_exit_value = exit_value - brokerage_fee
+        
+        # Subtract remaining debt from exit proceeds (65% permanent loan per updated model)
+        debt_amount = total_dev_cost * 0.65
+        exit_proceeds = net_exit_value - debt_amount
         
         # Add exit proceeds to final year
         cash_flows[-1] = cash_flows[-1] + exit_proceeds
@@ -1318,7 +1410,9 @@ Provide a market demand score (0-100) and brief analysis."""
         logger.info(f"   Year 1 NOI: ${annual_noi:,.0f}")
         logger.info(f"   Final Year ({operating_years}) NOI: ${final_year_noi:,.0f}")
         logger.info(f"   Exit Value (at {exit_cap_rate*100}% cap): ${exit_value:,.0f}")
-        logger.info(f"   Debt Payoff: ${debt_amount:,.0f}")
+        logger.info(f"   Brokerage Fee ({brokerage_tier}): ${brokerage_fee:,.0f}")
+        logger.info(f"   Net Exit Value (after brokerage): ${net_exit_value:,.0f}")
+        logger.info(f"   Debt Payoff (65% permanent loan): ${debt_amount:,.0f}")
         logger.info(f"   Net Exit Proceeds: ${exit_proceeds:,.0f}")
         
         # Calculate IRR
@@ -1342,6 +1436,13 @@ Provide a market demand score (0-100) and brief analysis."""
                 "annual_rent_growth": annual_rent_growth,
                 "exit_value": exit_value,
                 "exit_value_formatted": f"${exit_value:,.0f}" if exit_value else "N/A",
+                "brokerage_fee": brokerage_fee,
+                "brokerage_fee_formatted": f"${brokerage_fee:,.0f}",
+                "brokerage_rate": brokerage_rate,
+                "brokerage_rate_percent": f"{brokerage_rate * 100:.1f}%",
+                "brokerage_tier": brokerage_tier,
+                "net_exit_value": net_exit_value,
+                "net_exit_value_formatted": f"${net_exit_value:,.0f}",
                 "exit_proceeds": exit_proceeds,
                 "exit_proceeds_formatted": f"${exit_proceeds:,.0f}",
                 
@@ -1360,26 +1461,30 @@ Provide a market demand score (0-100) and brief analysis."""
                     "exit": f"+${exit_proceeds:,.0f} net proceeds at year {int(construction_months/12) + operating_years}"
                 },
                 
-                # Assumptions (updated per CIO feedback)
+                # Assumptions (updated per CIO feedback - Oct 2025)
                 "assumptions": [
-                    f"{construction_months}-month construction period (18 months)",
+                    f"{construction_months}-month construction period (tiered: 18/24/32 months by scale)",
                     "4-month lease-up period (Year 2 has 8 months of NOI)",
                     f"Exit at Year {int(construction_months/12) + operating_years} ({operating_years} years of operations)",
                     f"{annual_rent_growth*100}% annual rent growth",
                     f"Exit at {exit_cap_rate*100}% cap rate",
-                    "70% LTV debt financing",
-                    "30% operating expense ratio",
-                    "Unit mix: 20% studios (325sf), 55% 1BD (450sf), 25% 2BD (675sf)",
+                    "20% equity / 65% permanent loan (updated from 80% debt)",
+                    f"Tiered brokerage fee: {brokerage_tier} (2.0%-5.0% based on property value)",
+                    "30% operating expense ratio (reduced from 42%)",
+                    "Unit mix: 10% studios (325sf), 80% 1BD (450sf), 10% 2BD (675sf)",
                     "NO LIHTC tax credits",
                     "NO syndication"
                 ],
                 
                 # Key highlights
                 "highlights": [
-                    f"Equity required: ${equity_required:,.0f} (30% of ${total_dev_cost:,.0f})",
+                    f"Equity required: ${equity_required:,.0f} (20% of ${total_dev_cost:,.0f})",
+                    f"Permanent loan: ${debt_amount:,.0f} (65% LTV)",
                     f"First year NOI: ${annual_noi:,.0f}",
                     f"With {annual_rent_growth*100}% rent growth, final year NOI: ${final_year_noi:,.0f}",
-                    f"Exit proceeds: ${exit_proceeds:,.0f} at {exit_cap_rate*100}% cap rate",
+                    f"Exit value: ${exit_value:,.0f} at {exit_cap_rate*100}% cap rate",
+                    f"Brokerage fee ({brokerage_tier}): ${brokerage_fee:,.0f}",
+                    f"Net exit proceeds: ${exit_proceeds:,.0f}",
                     f"IRR: {irr_percent}% {'MEETS' if meets_target else 'below'} 20% target"
                 ],
                 
@@ -1388,7 +1493,8 @@ Provide a market demand score (0-100) and brief analysis."""
                     "Simplified equity-based return calculation",
                     "Operating expense ratio reduced to 30% (from 42%)",
                     "Shorter hold period: 7 years total (1.5 construction + 5.5 operations)",
-                    "Higher exit cap rate: 6% (more conservative)"
+                    "Higher exit cap rate: 6% (more conservative)",
+                    "Updated Oct 2025: 65% permanent loan, tiered brokerage (2.0%-5.0%), optimized unit mix (80% 1-beds)"
                 ]
             }
             
@@ -1579,20 +1685,64 @@ Provide a market demand score (0-100) and brief analysis."""
             ]
         }
     
+    def _get_developer_fee_percentage(self, unit_count: int) -> float:
+        """
+        Get developer fee percentage based on project scale.
+        
+        Updated per CIO (Oct 2025): Tiered developer fees
+        - <60 units: 8%
+        - 60-100 units: 7%
+        - 100-150 units: 6%
+        - 150+ units: 5%
+        """
+        if unit_count < 60:
+            return 0.08
+        elif unit_count < 100:
+            return 0.07
+        elif unit_count < 150:
+            return 0.06
+        else:
+            return 0.05
+    
+    def _get_construction_months(self, unit_count: int) -> int:
+        """
+        Get construction timeline based on project scale.
+        
+        Updated per CIO (Oct 2025): Tiered construction timelines
+        - <50 units: 18 months
+        - 50-150 units: 24 months
+        - 150+ units: 32 months
+        """
+        if unit_count < 50:
+            return 18
+        elif unit_count < 150:
+            return 24
+        else:
+            return 32
+    
     def _estimate_cost_per_unit(
         self,
         property_obj: Property,
-        unit_count: int
+        unit_count: int,
+        stories: int = 4
     ) -> Dict[str, Any]:
         """
         Estimate cost per unit for Logos affordable housing model.
         
-        Updated per CIO (Oct 2025): $325K per unit fixed cost
+        Updated per CIO (Oct 2025): Tiered construction costs by building height
+        - 3-story: $275K/unit (wood frame, simple construction)
+        - 4-story: $325K/unit (standard mid-rise)
+        - 5-story: $415K/unit (Type I/II construction, higher complexity)
         Average unit size: 425 sqft
         """
         
-        # CIO UPDATED REQUIREMENT: Fixed $325K per unit
-        base_cost_per_unit = 325000
+        # CIO UPDATED REQUIREMENT: Tiered costs by building height
+        if stories == 3:
+            base_cost_per_unit = 275000  # Wood frame
+        elif stories == 5:
+            base_cost_per_unit = 415000  # Type I/II construction
+        else:  # stories == 4 (default)
+            base_cost_per_unit = 325000  # Standard mid-rise
         
         # Apply minor scale adjustments for very large or very small projects
         total_cost_per_unit = base_cost_per_unit
@@ -1604,6 +1754,9 @@ Provide a market demand score (0-100) and brief analysis."""
         elif unit_count <= 30:
             total_cost_per_unit *= 1.05  # Slightly higher for small projects
         
+        # Get tiered developer fee percentage
+        developer_fee_pct = self._get_developer_fee_percentage(unit_count)
+        
         # Estimated breakdown (for reporting purposes)
         building_construction = total_cost_per_unit * 0.55  # 55% hard construction
         site_work = total_cost_per_unit * 0.10  # 10% site work
@@ -1611,7 +1764,7 @@ Provide a market demand score (0-100) and brief analysis."""
         utilities = 15000 if property_obj.has_water and property_obj.has_sewer else 40000
         soft_costs = total_cost_per_unit * 0.15  # 15% soft costs
         financing = total_cost_per_unit * 0.07  # 7% financing
-        developer_fee = total_cost_per_unit * 0.05  # 5% developer fee
+        developer_fee = total_cost_per_unit * developer_fee_pct  # Tiered: 8%/7%/6%/5%
         
         return {
             "cost_per_unit": int(total_cost_per_unit),
@@ -1626,13 +1779,19 @@ Provide a market demand score (0-100) and brief analysis."""
             },
             "assumptions": {
                 "base_cost_per_unit": base_cost_per_unit,
+                "stories": stories,
                 "avg_unit_size_sqft": 425,  # CIO updated
                 "parking_spaces_per_unit": 0.75,
                 "unit_count": unit_count,
+                "developer_fee_percentage": developer_fee_pct,
+                "construction_months": self._get_construction_months(unit_count),
                 "scale_factor_applied": unit_count >= 60 or unit_count <= 30
             },
             "notes": [
-                "CIO Updated (Oct 2025): Fixed $325K per unit",
+                f"CIO Updated (Oct 2025): Tiered costs - 3-story: $265K, 4-story: $325K, 5-story: $415K",
+                f"Current scenario: {stories}-story building at ${base_cost_per_unit:,}/unit",
+                f"Developer fee: {developer_fee_pct*100}% (tiered by unit count)",
+                f"Construction timeline: {self._get_construction_months(unit_count)} months",
                 "Average unit size: 425 sqft",
                 "Does not include land acquisition (church owns land)",
                 "Financing: 20% equity / 80% debt"
