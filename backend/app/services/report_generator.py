@@ -274,16 +274,14 @@ class ReportGenerator:
         story.append(Paragraph("Executive Summary", self.styles['CustomSubtitle']))
         story.append(Spacer(1, 0.2*inch))
         
-        # Key metrics table
+        # Key metrics table (Updated Oct 2025: Removed property details)
         grade = self._calculate_grade(assessment.overall_score)
         recommendation = self._get_recommendation_text(grade, assessment.overall_score)
         
+        # Only show high-level assessment results, not property details
         summary_data = [
-            ['Property', property_obj.name],
-            ['Location', f"{property_obj.city}, {property_obj.state}"],
-            ['Property Type', property_obj.property_type.value if property_obj.property_type else 'N/A'],
-            ['Lot Size', f"{property_obj.lot_size_acres:.2f} acres" if property_obj.lot_size_acres else 'N/A'],
-            ['Investment Grade', f"{grade} ({assessment.overall_score:.1f}/100)"],
+            ['Overall Financial Score', f"{grade} ({assessment.overall_score:.1f}/100)"],
+            ['Pass/Fail Status', '✅ PASS' if assessment.overall_score >= 70 else '❌ FAIL'],
             ['Recommendation', recommendation],
             ['Assessment Date', assessment.processing_completed_at.strftime('%B %d, %Y') if assessment.processing_completed_at else 'In Progress']
         ]
@@ -303,12 +301,13 @@ class ReportGenerator:
         story.append(summary_table)
         story.append(Spacer(1, 0.3*inch))
         
-        # Summary text
+        # Summary text (Updated Oct 2025: Focus on methodology, not property details)
         summary_text = f"""
-        This property assessment evaluates the viability of developing affordable housing 
-        at {property_obj.name} in {property_obj.city}, {property_obj.state}. The assessment 
-        incorporates data from 7 government and public data sources including Census demographics, 
-        HUD Fair Market Rent, FEMA flood risk, and local market conditions.
+        This assessment evaluates the financial viability of developing affordable housing using 
+        Logos Faith Development's Version 3.0 methodology (October 2025). The analysis incorporates 
+        data from 7+ government and public sources including HUD Fair Market Rent, Census demographics, 
+        FEMA flood risk, and local market conditions. Financial viability is now 100% of the overall 
+        score, with a passing threshold of 70%.
         """
         story.append(Paragraph(summary_text, self.styles['BodyText']))
         
@@ -371,43 +370,43 @@ class ReportGenerator:
         story.append(Paragraph("<b>📊 COMPREHENSIVE GRADING BREAKDOWN</b>", self.styles['SectionHeader']))
         story.append(Spacer(1, 0.15*inch))
         
-        # Score breakdown table
+        # Score breakdown table (Updated Oct 2025: Financial = 100%, Pass threshold = 70%)
         score_data = [
             ['Category', 'Score', 'Grade', 'Weight', 'Status'],
             [
                 'Financial Viability',
                 f'{assessment.financial_score:.1f}/100',
                 self._calculate_grade(assessment.financial_score),
-                '30%',
-                '✓ Pass' if assessment.financial_score >= 60 else '✗ Fail'
+                '100%',  # Updated Oct 2025: Financial is now 100% of score
+                '✓ Pass' if assessment.financial_score >= 70 else '✗ Fail'  # Updated Oct 2025: 70% threshold
             ],
             [
                 'Market Demand',
                 f'{assessment.market_score:.1f}/100',
                 self._calculate_grade(assessment.market_score),
-                '25%',
-                '✓ Pass' if assessment.market_score >= 60 else '✗ Fail'
+                '0%',  # Updated Oct 2025: Informational only
+                'Info Only'  # Not used for pass/fail
             ],
             [
                 'Location Quality',
                 f'{assessment.location_score:.1f}/100',
                 self._calculate_grade(assessment.location_score),
-                '20%',
-                '✓ Pass' if assessment.location_score >= 60 else '✗ Fail'
+                '0%',  # Updated Oct 2025: Informational only
+                'Info Only'
             ],
             [
                 'Partnership Alignment',
                 f'{assessment.partnership_score:.1f}/100',
                 self._calculate_grade(assessment.partnership_score),
-                '15%',
-                '✓ Pass' if assessment.partnership_score >= 60 else '✗ Fail'
+                '0%',  # Updated Oct 2025: Informational only
+                'Info Only'
             ],
             [
                 'Risk Assessment',
                 f'{assessment.risk_score:.1f}/100',
                 self._calculate_grade(assessment.risk_score),
-                '10%',
-                '✓ Pass' if assessment.risk_score >= 60 else '✗ Fail'
+                '0%',  # Updated Oct 2025: Informational only
+                'Info Only'
             ],
             [
                 'OVERALL ASSESSMENT',
@@ -522,16 +521,24 @@ class ReportGenerator:
             annual_revenue = revenue_proj.get('total_annual_revenue', 0)
             noi = revenue_proj.get('net_operating_income', 0)
             roi = revenue_proj.get('roi_percent', 0)
+            irr_percent = revenue_proj.get('irr_percent', 0)
+            
+            # Total Project Cost (Oct 2025)
+            total_project_cost = fin_proj.get('total_project_cost', 0)
+            adjusted_dev_cost = fin_proj.get('adjusted_development_cost', 0)
             
             financial_text = f"""
             <para backColor=#e3f2fd leftIndent=10 rightIndent=10 spaceBefore=6 spaceAfter=6>
             <b>💰 FINANCIAL ANALYSIS ({assessment.financial_score:.1f}/100 - {self._calculate_grade(assessment.financial_score)})</b><br/>
             • Feasible Unit Count: <b>{feasible_units} units</b><br/>
-            • Cost Per Unit: <b>${cost_per_unit:,.0f}</b> (Target: ≤$325,000)<br/>
+            • Cost Per Unit: <b>${cost_per_unit:,.0f}</b> (Tiered: $265K/325K/415K by height)<br/>
+            • Development Cost: <b>${adjusted_dev_cost:,.0f}</b><br/>
+            • Total Project Cost: <b>${total_project_cost:,.0f}</b> (Dev Cost + Net Land Value)<br/>
             • Projected Annual Revenue: <b>${annual_revenue:,.0f}</b><br/>
             • Net Operating Income: <b>${noi:,.0f}</b><br/>
-            • Return on Investment: <b>{roi:.1f}%</b><br/>
-            • Target Range: 40-140 units (optimal economies of scale)<br/>
+            • IRR: <b>{irr_percent:.1f}%</b> (Target: 20%+)<br/>
+            • ROI: <b>{roi:.1f}%</b><br/>
+            • Target Range: 40-140 units (optimal scale)<br/>
             {'• <font color=green><b>✓ MEETS MINIMUM VIABILITY</b></font>' if feasible_units >= 40 else '• <font color=red><b>✗ BELOW MINIMUM (40 units required)</b></font>'}
             </para>
             """
@@ -1151,14 +1158,14 @@ class ReportGenerator:
         story.append(Paragraph("Assessment Scores", self.styles['CustomSubtitle']))
         story.append(Spacer(1, 0.2*inch))
         
-        # Score breakdown table
+        # Score breakdown table (Updated Oct 2025: Financial = 100%)
         scores_data = [
             ['Category', 'Score', 'Weight', 'Weighted Score'],
-            ['Location Viability', f"{assessment.location_score:.1f}/100", '25%', f"{assessment.location_score * 0.25:.1f}"],
-            ['Market Demand', f"{assessment.market_score:.1f}/100", '25%', f"{assessment.market_score * 0.25:.1f}"],
-            ['Financial Feasibility', f"{assessment.financial_score:.1f}/100", '20%', f"{assessment.financial_score * 0.20:.1f}"],
-            ['Partnership Strength', f"{assessment.partnership_score:.1f}/100", '15%', f"{assessment.partnership_score * 0.15:.1f}"],
-            ['Risk Assessment', f"{assessment.risk_score:.1f}/100", '15%', f"{assessment.risk_score * 0.15:.1f}"],
+            ['Financial Feasibility', f"{assessment.financial_score:.1f}/100", '100%', f"{assessment.financial_score * 1.0:.1f}"],
+            ['Location Viability', f"{assessment.location_score:.1f}/100", '0%', 'Info Only'],
+            ['Market Demand', f"{assessment.market_score:.1f}/100", '0%', 'Info Only'],
+            ['Partnership Strength', f"{assessment.partnership_score:.1f}/100", '0%', 'Info Only'],
+            ['Risk Assessment', f"{assessment.risk_score:.1f}/100", '0%', 'Info Only'],
             ['', '', '<b>Overall Score</b>', f"<b>{assessment.overall_score:.1f}/100</b>"]
         ]
         
@@ -1351,11 +1358,11 @@ class ReportGenerator:
                 ['Metric', 'Value'],
                 ['Feasible Units', f"{feasible_units} units" if feasible_units else "N/A"],
                 ['Annual Revenue', f"${annual_revenue:,.0f}" if annual_revenue else "N/A"],
-                ['Operating Expenses (42%)', f"${operating_expenses:,.0f}" if operating_expenses else "N/A"],
+                ['Operating Expenses (30%)', f"${operating_expenses:,.0f}" if operating_expenses else "N/A"],
                 ['Net Operating Income (NOI)', f"${noi:,.0f}" if noi else "N/A"],
                 ['Total Development Cost', f"${total_dev_cost:,.0f}" if total_dev_cost else "N/A"],
                 ['Cost Per Unit', f"${cost_per_unit:,.0f}" if cost_per_unit else "N/A"],
-                ['IRR (10-year hold)', f"{irr_percent:.2f}% {'✓ Meets 20% target' if meets_irr_target else '(Target: 20%)'}" if irr_percent is not None else "Calculating..."],
+                ['IRR (7-year hold)', f"{irr_percent:.2f}% {'✓ Meets 20% target' if meets_irr_target else '(Target: 20%)'}" if irr_percent is not None else "Calculating..."],
                 ['Return on Investment (ROI)', f"{roi:.2f}%" if roi else "N/A"],
                 ['Yield on Cost (YOC)', f"{yield_on_cost:.2f}% (Target: 7%)" if yield_on_cost else "N/A"],
                 ['Cash-on-Cash Return', f"{cash_on_cash:.2f}%" if cash_on_cash else "N/A"],
@@ -1377,12 +1384,112 @@ class ReportGenerator:
             
             story.append(metrics_table)
             
-            # Add assumptions
+            # Multi-Story Development Scenarios (Oct 2025)
+            multi_story_scenarios = proj.get('multi_story_scenarios', {})
+            if multi_story_scenarios and multi_story_scenarios.get('scenarios'):
+                story.append(Spacer(1, 0.3*inch))
+                story.append(Paragraph("<b>🏗️ Development Scenarios (3/4/5 Stories)</b>", self.styles['SectionHeader']))
+                story.append(Spacer(1, 0.15*inch))
+                
+                scenarios = multi_story_scenarios['scenarios']
+                recommended = multi_story_scenarios.get('recommended', '4_story')
+                
+                scenario_data = [
+                    ['', '3-Story', '4-Story', '5-Story']
+                ]
+                
+                # Extract data for each scenario
+                for field, label in [
+                    ('units', 'Units'),
+                    ('cost_per_unit', 'Cost/Unit'),
+                    ('construction_months', 'Construction'),
+                    ('total_development_cost_formatted', 'Total Project Cost'),
+                    ('equity_required_formatted', 'Equity (20%)'),
+                    ('annual_revenue_formatted', 'Annual Revenue'),
+                    ('noi_formatted', 'NOI'),
+                    ('irr_percent', 'IRR'),
+                    ('meets_irr_target', 'Meets 20% Target?')
+                ]:
+                    row = [label]
+                    for story_key in ['3_story', '4_story', '5_story']:
+                        scenario = scenarios.get(story_key, {})
+                        value = scenario.get(field, 'N/A')
+                        
+                        if field == 'cost_per_unit':
+                            row.append(f"${value:,.0f}" if isinstance(value, (int, float)) else str(value))
+                        elif field == 'construction_months':
+                            row.append(f"{value} mo" if value != 'N/A' else 'N/A')
+                        elif field == 'irr_percent':
+                            # Add warning indicator for low IRR
+                            if isinstance(value, (int, float)):
+                                if scenario.get('not_recommended', False):
+                                    row.append(f"⚠️ {value:.1f}%")
+                                else:
+                                    row.append(f"{value:.1f}%")
+                            else:
+                                row.append(str(value))
+                        elif field == 'meets_irr_target':
+                            row.append('✓ Yes' if value else '✗ No')
+                        else:
+                            row.append(str(value))
+                    
+                    scenario_data.append(row)
+                
+                scenario_table = Table(scenario_data, colWidths=[2*inch, 1.5*inch, 1.5*inch, 1.5*inch])
+                scenario_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1976d2')),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                    ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+                    ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 9),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                    ('TOPPADDING', (0, 0), (-1, -1), 6),
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f5f5f5')]),
+                ]))
+                
+                # Highlight recommended column
+                rec_col = {'3_story': 1, '4_story': 2, '5_story': 3}.get(recommended, 2)
+                scenario_table.setStyle(TableStyle([
+                    ('BACKGROUND', (rec_col, 0), (rec_col, 0), colors.HexColor('#4caf50')),
+                ]))
+                
+                story.append(scenario_table)
+                story.append(Spacer(1, 0.1*inch))
+                
+                # Add note about recommended scenario
+                rec_note = f"""
+                <para fontSize=9 textColor=#4caf50 leftIndent=10>
+                <b>✓ Recommended:</b> {recommended.replace('_', ' ').title()} 
+                ({multi_story_scenarios.get('recommended_reason', 'Best IRR')})
+                </para>
+                """
+                story.append(Paragraph(rec_note, self.styles['Normal']))
+                
+                # Add warning for not recommended scenarios
+                not_recommended_scenarios = []
+                for story_key in ['3_story', '4_story', '5_story']:
+                    scenario = scenarios.get(story_key, {})
+                    if scenario.get('not_recommended', False):
+                        story_label = story_key.replace('_', ' ').title()
+                        not_recommended_scenarios.append(story_label)
+                
+                if not_recommended_scenarios:
+                    warning_note = f"""
+                    <para fontSize=9 textColor=#d32f2f leftIndent=10>
+                    <b>⚠️ Not Recommended:</b> {', '.join(not_recommended_scenarios)} (IRR &lt; 10%)
+                    </para>
+                    """
+                    story.append(Paragraph(warning_note, self.styles['Normal']))
+            
+            # Add assumptions (Updated Oct 2025)
             story.append(Spacer(1, 0.2*inch))
             assumptions_text = """
             <para fontSize=9 textColor=#666666>
-            <b>Assumptions:</b> 20% 1BR, 60% 2BR, 20% 3BR unit mix  • 42% operating expense ratio •
-            100% occupancy (Section 8) • 30% equity / 70% debt financing • Does not include debt service payments
+            <b>Assumptions (Oct 2025):</b> 10% studios, 80% 1BR, 10% 2BR • 30% OpEx ratio (4.5% mgmt, 2% tax) •
+            100% occupancy (Section 8) • 20% equity / 65% permanent loan • Tiered brokerage (2.0%-5.0%) at exit •
+            Tiered costs: $275K/325K/415K per unit • Tiered developer fees: 8%/7%/6%/5% • Year 7 exit
             </para>
             """
             story.append(Paragraph(assumptions_text, self.styles['Normal']))
