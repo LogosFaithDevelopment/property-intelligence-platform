@@ -154,30 +154,48 @@ class Assessment(BaseModel, UUIDMixin):
     
     @property
     def score_grade(self) -> str:
-        """Convert numeric score to letter grade"""
+        """
+        Convert numeric score to letter grade
+        
+        Updated Oct 2025: Passing score raised to 70%
+        Financial viability is now 100% of score (other factors informational only)
+        """
         if not self.overall_score:
             return "N/A"
         
+        # Passing grades (70%+)
         if self.overall_score >= 90:
-            return "A+"
+            return "A+ (Excellent)"
         elif self.overall_score >= 85:
-            return "A"
+            return "A (Excellent)"
         elif self.overall_score >= 80:
-            return "A-"
+            return "A- (Very Good)"
         elif self.overall_score >= 75:
-            return "B+"
+            return "B+ (Good)"
         elif self.overall_score >= 70:
-            return "B"
+            return "B (Pass)"
+        
+        # Failing grades (<70%)
         elif self.overall_score >= 65:
-            return "B-"
+            return "C+ (Below Target)"
         elif self.overall_score >= 60:
-            return "C+"
+            return "C (Marginal)"
         elif self.overall_score >= 55:
-            return "C"
+            return "C- (Weak)"
         elif self.overall_score >= 50:
-            return "C-"
+            return "D+ (Poor)"
+        elif self.overall_score >= 40:
+            return "D (Fail)"
         else:
-            return "D"
+            return "F (Reject)"
+    
+    @property
+    def passes_threshold(self) -> bool:
+        """
+        Check if assessment passes the 70% threshold (Oct 2025)
+        Based on financial viability only
+        """
+        return self.overall_score is not None and self.overall_score >= 70.0
     
     def start_processing(self):
         """Mark assessment as processing"""
