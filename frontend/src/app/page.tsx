@@ -25,7 +25,7 @@ export default function HomePage() {
       <div className='min-h-screen bg-gradient-to-b from-blue-50 to-white'>
         {/* Hero Section */}
         <div className='container mx-auto px-4 py-8'>
-          <nav className='flex justify-between items-center mb-8'>
+          <nav className='flex justify-between items-center mb-8 mt-20'>
             <div className='flex-1 flex justify-center'>
               <Image
                 src='/home-logos.png'
@@ -35,7 +35,7 @@ export default function HomePage() {
                 className='object-contain'
               />
             </div>
-            <div className='flex gap-4 absolute right-8'>
+            <div className='flex gap-4 absolute right-8 top-28'>
               {isLoaded && (
                 <>
                   {isSignedIn ? (
@@ -54,13 +54,10 @@ export default function HomePage() {
 
           <div className='max-w-4xl mx-auto text-center'>
             <h1 className='text-5xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent'>
-              Transform Church Land Into Community Housing
+              Transforming Underutilized Land Into Housing
             </h1>
             <p className='text-xl text-gray-600 mb-8'>
-              Logos Faith Development partners with churches to build affordable
-              housing through modular construction. We provide 100% private
-              funding your church shares ownership and creates lasting community
-              impact.
+              We provide 100% private funding.
             </p>
             <div className='flex gap-4 justify-center flex-wrap'>
               {isLoaded && (
@@ -76,7 +73,7 @@ export default function HomePage() {
                   ) : (
                     <Link href='/sign-in'>
                       <Button size='lg' className='text-lg px-8'>
-                        Sign In to Submit Property
+                        Submit Your Property for Review
                       </Button>
                     </Link>
                   )}
@@ -92,7 +89,7 @@ export default function HomePage() {
         </div>
 
         {/* Benefits Section */}
-        <div className='container mx-auto px-4 py-16'>
+        {/* <div className='container mx-auto px-4 py-16'>
           <h2 className='text-3xl font-bold text-center mb-12'>
             Why Partner With Logos Faith Development?
           </h2>
@@ -131,10 +128,10 @@ export default function HomePage() {
               </CardContent>
             </Card>
           </div>
-        </div>
+        </div> */}
 
         {/* How It Works */}
-        <div className='bg-blue-50 py-16'>
+        {/* <div className='bg-blue-50 py-16'>
           <div className='container mx-auto px-4'>
             <h2 className='text-3xl font-bold text-center mb-12'>
               Our Partnership Process
@@ -178,10 +175,10 @@ export default function HomePage() {
               ))}
             </div>
           </div>
-        </div>
+        </div> */}
 
         {/* CTA Section */}
-        <div className='container mx-auto px-4 py-16'>
+        {/* <div className='container mx-auto px-4 py-16'>
           <div className='max-w-2xl mx-auto text-center'>
             <h2 className='text-3xl font-bold mb-4'>
               Ready to Make an Impact?
@@ -197,14 +194,14 @@ export default function HomePage() {
               </Button>
             </Link>
           </div>
-        </div>
+        </div> */}
 
         {/* Footer */}
-        <footer className='bg-gray-900 text-white py-8'>
+        {/* <footer className='bg-gray-900 text-white py-8'>
           <div className='container mx-auto px-4 text-center'>
             <p>&copy; 2025 Property Intel Inc. All rights reserved.</p>
           </div>
-        </footer>
+        </footer> */}
       </div>
     </>
   );
