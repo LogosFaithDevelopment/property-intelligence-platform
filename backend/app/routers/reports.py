@@ -12,7 +12,6 @@ from app.database import get_db
 from app.models.assessment import Assessment
 from app.models.report import Report, ReportFormat, ReportStatus, ReportType
 from app.schemas.base import SuccessResponse
-from app.services.report_generator import ReportGenerator
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import and_, select
@@ -325,16 +324,25 @@ async def generate_pdf_report(
         # Generate PDF using synchronous session
         # (ReportLab requires sync operations)
         from app.database import SyncSessionLocal
+        from app.services.report_generator_v3 import ReportGeneratorV3
 
         # Create sync session for ReportLab
         sync_db = SyncSessionLocal()
         
         try:
-            generator = ReportGenerator(sync_db)
-            pdf_bytes = await generator.generate_assessment_report(
-                assessment_id=assessment_id,
-                include_detailed_analysis=include_detailed_analysis
-            )
+            # Get assessment, property, and church data from sync session
+            from app.models.church import Church
+            from app.models.property import Property
+
+            # IMPORTANT: Get assessment from sync session to ensure JSON fields are properly loaded
+            sync_assessment = sync_db.query(Assessment).filter(Assessment.id == assessment_id).first()
+            property_obj = sync_db.query(Property).filter(Property.id == sync_assessment.property_id).first()
+            church = sync_db.query(Church).filter(Church.id == sync_assessment.church_id).first()
+            
+            # Generate PDF using V3 generator
+            generator = ReportGeneratorV3()
+            pdf_buffer = generator.generate_report(sync_assessment, property_obj, church)
+            pdf_bytes = pdf_buffer.getvalue()
         finally:
             sync_db.close()
         
@@ -396,16 +404,26 @@ async def download_assessment_report_v2(
                 detail=f"Assessment {assessment_id} not found"
             )
         
-        # Import V2 generator
+        # Import V3 generator (clean implementation matching web page)
         # Get synchronous session for report generator
         from app.database import SyncSessionLocal
-        from app.services.report_generator_v2 import ReportGeneratorV2
+        from app.services.report_generator_v3 import ReportGeneratorV3
         sync_db = SyncSessionLocal()
         
         try:
-            # Generate PDF using V2 generator
-            generator = ReportGeneratorV2(sync_db)
-            pdf_bytes = await generator.generate_assessment_report(assessment_id)
+            # Get assessment, property, and church data from sync session
+            from app.models.church import Church
+            from app.models.property import Property
+
+            # IMPORTANT: Get assessment from sync session to ensure JSON fields are properly loaded
+            sync_assessment = sync_db.query(Assessment).filter(Assessment.id == assessment_id).first()
+            property_obj = sync_db.query(Property).filter(Property.id == sync_assessment.property_id).first()
+            church = sync_db.query(Church).filter(Church.id == sync_assessment.church_id).first()
+            
+            # Generate PDF using V3 generator
+            generator = ReportGeneratorV3()
+            pdf_buffer = generator.generate_report(sync_assessment, property_obj, church)
+            pdf_bytes = pdf_buffer.getvalue()
             
             # Generate filename with property address
             from app.models.property import Property

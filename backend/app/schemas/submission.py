@@ -3,7 +3,7 @@ Submission Pydantic Schemas
 Request/response schemas for complete church property submissions
 """
 
-from typing import Optional
+from typing import List, Optional
 
 from app.models.property import PropertyType
 from app.schemas.base import BaseSchema
@@ -63,6 +63,9 @@ class PropertySubmissionData(BaseSchema):
     lot_size_sqft: Optional[float] = Field(None, ge=0, description="Lot size in square feet")
     current_usage: Optional[str] = Field(None, max_length=255, description="Current property usage")
     zoning_description: Optional[str] = Field(None, max_length=255, description="Zoning classification")
+    
+    # Financial Information (owner-provided estimate, separate from public assessed_value)
+    market_value_estimate: Optional[float] = Field(None, ge=0, description="Owner's estimate of current market value")
 
 
 class AssessmentSubmissionData(BaseSchema):
@@ -70,6 +73,7 @@ class AssessmentSubmissionData(BaseSchema):
     # Ownership
     owns_property_free_clear: Optional[bool] = Field(None, description="Owns property free and clear")
     willing_to_ground_lease: Optional[bool] = Field(None, description="Willing to ground lease")
+    existing_debt_amount: Optional[float] = Field(None, ge=0, description="Existing debt amount on the property in USD")
     
     # Congregation Approval
     congregation_voted: Optional[bool] = Field(None, description="Has congregation voted")
@@ -92,6 +96,10 @@ class AssessmentSubmissionData(BaseSchema):
     # Available Build Space (NEW FIELDS)
     available_build_sqft: Optional[float] = Field(None, ge=0, description="Available build space in sqft")
     build_area_notes: Optional[str] = Field(None, description="Build area constraints/notes")
+    
+    # Property Improvement & Financing Needs (NEW FIELDS)
+    property_improvement_needs: Optional[List[str]] = Field(None, description="Property improvement needs checklist")
+    capital_financing_need: Optional[str] = Field(None, max_length=100, description="Capital or financing need description")
 
 
 class SubmissionCreate(BaseSchema):

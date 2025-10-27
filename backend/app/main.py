@@ -4,6 +4,7 @@ Property Intelligence Platform Backend
 """
 
 import logging
+import os
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -16,16 +17,41 @@ from fastapi.responses import JSONResponse
 sys.path.append(str(Path(__file__).parent))
 
 from app.config import get_settings
-from app.database import create_tables, engine
+from app.database import connect_with_retry, engine
+from app.middleware.request_logging import RequestLoggingMiddleware
 from app.routers import (admin_actions, admin_auth, admin_stats, assessments,
-                         auth, churches, properties, reports, submissions)
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+                         auth, churches, health, properties, reports,
+                         submissions)
+# Import logging configuration
+from app.utils.logging_config import get_logger, setup_logging
 
 # Get settings
 settings = get_settings()
+
+# Configure logging (JSON format in production)
+# Ensure early logging to stdout for CloudWatch
+logging.basicConfig(stream=sys.stdout, level=logging.INFO, force=True)
+setup_logging(
+    log_level=settings.log_level,
+    environment=settings.environment
+)
+logger = get_logger(__name__)
+
+# Readiness state
+_ready = {"db": False}
+
+# Log missing environment variables (don't exit)
+logger.info("🔍 Checking environment variables...")
+required_env_vars = [
+    "SECRET_KEY", "DATABASE_URL", "REDIS_URL", "CLERK_SECRET_KEY", 
+    "OPENAI_API_KEY", "ATTOM_API_KEY", "GOOGLE_MAPS_API_KEY", 
+    "SMARTY_AUTH_ID", "SMARTY_AUTH_TOKEN", "HUD_API_KEY"
+]
+missing_vars = [var for var in required_env_vars if not os.getenv(var)]
+if missing_vars:
+    logger.error(f"⚠️  Missing environment variables: {', '.join(missing_vars)}")
+else:
+    logger.info("✅ All required environment variables present")
 
 
 @asynccontextmanager
@@ -33,9 +59,10 @@ async def lifespan(app: FastAPI):
     """Application lifespan management"""
     logger.info("🚀 Starting Property Intelligence Platform...")
     
-    # Create database tables
-    await create_tables()
-    logger.info("✅ Database tables created/verified")
+    # Don't block on database connection - let app start immediately
+    # Database will be connected lazily on first use
+    logger.info("⏭️  Skipping database connection during startup - will connect on first use")
+    _ready["db"] = False
     
     yield
     
@@ -62,28 +89,49 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-# Health check endpoint
-@app.get("/health")
-async def health_check():
-    """Health check endpoint for monitoring"""
-    return {
-        "status": "healthy",
-        "service": "Property Intelligence Platform API",
-        "version": "1.0.0",
-        "environment": settings.environment
-    }
+# Add request logging middleware
+app.add_middleware(RequestLoggingMiddleware)
 
 
-# Root endpoint
+# Health check endpoints are now in routers/health.py
+
+
+# Root endpoint - simple liveness probe (always returns 200)
 @app.get("/")
 async def root():
-    """Root endpoint with API information"""
+    """
+    Liveness probe - returns 200 OK if application is running.
+    Used by ALB health checks. Always returns success even if dependencies are unavailable.
+    """
+    return {"status": "ok"}
+
+
+# Readiness endpoint - checks if all dependencies are ready
+@app.get("/readyz")
+async def readiness():
+    """
+    Readiness probe - returns status of dependencies.
+    Returns 200 if all dependencies are ready, 503 if any are not ready.
+    """
+    if all(_ready.values()):
+        return {"ready": True, "db": _ready["db"]}
+    else:
+        return JSONResponse(
+            status_code=503,
+            content={"ready": False, "db": _ready["db"]}
+        )
+
+
+# Info endpoint with API information
+@app.get("/info")
+async def info():
+    """API information endpoint"""
     return {
         "message": "Welcome to Property Intelligence Platform API",
         "version": "1.0.0",
         "docs": "/docs" if settings.environment == "development" else "Contact admin for API documentation",
-        "health": "/health"
+        "health": "/health",
+        "readiness": "/readyz"
     }
 
 
@@ -106,6 +154,10 @@ async def global_exception_handler(request, exc):
 
 
 # Include routers
+# Health checks (no prefix for ECS compatibility)
+app.include_router(health.router, tags=["Health"])
+
+# API routers
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(admin_auth.router, prefix="/api/v1", tags=["Admin Auth"])
 app.include_router(admin_stats.router)  # Admin stats (includes /api/v1 prefix)

@@ -5,9 +5,9 @@ Using Pydantic Settings for environment-based configuration
 
 import os
 from functools import lru_cache
-from typing import List, Optional
+from typing import List, Optional, Union
 
-from pydantic import Field, validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     environment: str = Field(default="development", alias="ENVIRONMENT")
     secret_key: str = Field(..., alias="SECRET_KEY")
     debug: bool = Field(default=False, alias="DEBUG")
+    log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     
     # Database
     database_url: str = Field(..., alias="DATABASE_URL")
@@ -70,19 +71,53 @@ class Settings(BaseSettings):
     posthog_api_key: Optional[str] = Field(None, alias="POSTHOG_API_KEY")
     
     # CORS
-    allowed_origins: List[str] = Field(
+    allowed_origins: Union[List[str], str] = Field(
         default=["http://localhost:3000", "http://127.0.0.1:3000"],
         alias="ALLOWED_ORIGINS"
     )
     
-    @validator("allowed_origins", pre=True)
+    # Security - Allowed hosts for production
+    allowed_hosts: Union[List[str], str] = Field(
+        default=["localhost", "127.0.0.1"],
+        alias="ALLOWED_HOSTS"
+    )
+    
+    @field_validator("allowed_origins", mode="before")
+    @classmethod
     def parse_cors_origins(cls, v):
         """Parse CORS origins from string or list"""
         if isinstance(v, str):
-            return [origin.strip() for origin in v.split(",")]
+            # Try to parse as JSON array first
+            import json
+            try:
+                parsed = json.loads(v)
+                if isinstance(parsed, list):
+                    return parsed
+            except (json.JSONDecodeError, ValueError):
+                pass
+            # Fall back to comma-separated string
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
         return v
     
-    @validator("allowed_file_types", pre=True)
+    @field_validator("allowed_hosts", mode="before")
+    @classmethod
+    def parse_allowed_hosts(cls, v):
+        """Parse allowed hosts from string or list"""
+        if isinstance(v, str):
+            # Try to parse as JSON array first
+            import json
+            try:
+                parsed = json.loads(v)
+                if isinstance(parsed, list):
+                    return parsed
+            except (json.JSONDecodeError, ValueError):
+                pass
+            # Fall back to comma-separated string
+            return [host.strip() for host in v.split(",") if host.strip()]
+        return v
+    
+    @field_validator("allowed_file_types", mode="before")
+    @classmethod
     def parse_file_types(cls, v):
         """Parse allowed file types from string or list"""
         if isinstance(v, str):

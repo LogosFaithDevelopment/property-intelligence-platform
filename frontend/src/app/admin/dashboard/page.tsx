@@ -20,6 +20,7 @@ import {
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@clerk/nextjs';
+import { getApiBaseUrl } from '@/lib/api-client';
 
 interface DashboardStats {
   total_submissions: number;
@@ -59,7 +60,7 @@ export default function AdminDashboard() {
 
       // Fetch stats
       const statsRes = await fetch(
-        'http://localhost:8000/api/v1/admin/stats/dashboard',
+        `${getApiBaseUrl()}/api/v1/admin/stats/dashboard`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -72,7 +73,7 @@ export default function AdminDashboard() {
 
       // Fetch recent submissions
       const recentRes = await fetch(
-        'http://localhost:8000/api/v1/admin/stats/recent-submissions?limit=5',
+        `${getApiBaseUrl()}/api/v1/admin/stats/recent-submissions?limit=5`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -120,14 +121,14 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className='max-w-7xl mx-auto'>
-      {/* Header */}
-      <div className='mb-8'>
-        <h1 className='text-3xl font-bold mb-2 font-[family-name:var(--font-safe-light-accent)]'>
+    <div className='max-w-7xl mx-auto w-full'>
+      {/* Header - Add top margin on mobile to account for fixed nav bar */}
+      <div className='mb-6 sm:mb-8 mt-4 sm:mt-0'>
+        <h1 className='text-2xl sm:text-3xl font-bold mb-2 font-[family-name:var(--font-safe-light-accent)]'>
           Dashboard
         </h1>
-        <p className='text-gray-600'>
-          Welcome back! Here's an overview of property submissions.
+        <p className='text-sm sm:text-base text-gray-600'>
+          Welcome back! Here&apos;s an overview of property submissions.
         </p>
         {role && (
           <div className='mt-2'>
@@ -138,98 +139,103 @@ export default function AdminDashboard() {
         )}
       </div>
 
-      {/* Stats Grid */}
-      <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8'>
+      {/* Stats Grid - 2 rows of 3 on mobile, 2 cols on tablet, 3 cols on desktop */}
+      <div className='grid grid-cols-3 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6 mb-8'>
         <Card>
-          <CardHeader className='flex flex-row items-center justify-between pb-2'>
-            <CardTitle className='text-sm font-medium text-gray-600'>
+          <CardHeader className='flex flex-row items-center justify-between pb-2 space-y-0'>
+            <CardTitle className='text-xs sm:text-sm font-medium text-gray-600'>
               Total Submissions
             </CardTitle>
-            <FileText className='h-4 w-4 text-gray-600' />
+            <FileText className='h-3 w-3 sm:h-4 sm:w-4 text-gray-600' />
           </CardHeader>
           <CardContent>
-            <div className='text-3xl font-bold'>
+            <div className='text-xl sm:text-2xl md:text-3xl font-bold'>
               {stats?.total_submissions || 0}
             </div>
-            <p className='text-xs text-gray-500 mt-1'>All time</p>
+            <p className='text-[10px] sm:text-xs text-gray-500 mt-1'>
+              All time
+            </p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className='flex flex-row items-center justify-between pb-2'>
-            <CardTitle className='text-sm font-medium text-gray-600'>
-              Pending Review
+          <CardHeader className='flex flex-row items-center justify-between pb-2 space-y-0'>
+            <CardTitle className='text-xs sm:text-sm font-medium text-gray-600'>
+              Pending
             </CardTitle>
-            <Clock className='h-4 w-4 text-yellow-600' />
+            <Clock className='h-3 w-3 sm:h-4 sm:w-4 text-yellow-600' />
           </CardHeader>
           <CardContent>
-            <div className='text-3xl font-bold text-yellow-600'>
+            <div className='text-xl sm:text-2xl md:text-3xl font-bold text-yellow-600'>
               {stats?.pending_submissions || 0}
             </div>
-            <p className='text-xs text-gray-500 mt-1'>Awaiting action</p>
+            <p className='text-[10px] sm:text-xs text-gray-500 mt-1'>
+              Awaiting
+            </p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className='flex flex-row items-center justify-between pb-2'>
-            <CardTitle className='text-sm font-medium text-gray-600'>
+          <CardHeader className='flex flex-row items-center justify-between pb-2 space-y-0'>
+            <CardTitle className='text-xs sm:text-sm font-medium text-gray-600'>
               Properties
             </CardTitle>
-            <Users className='h-4 w-4 text-purple-600' />
+            <Users className='h-3 w-3 sm:h-4 sm:w-4 text-purple-600' />
           </CardHeader>
           <CardContent>
-            <div className='text-3xl font-bold text-purple-600'>
+            <div className='text-xl sm:text-2xl md:text-3xl font-bold text-purple-600'>
               {stats?.total_properties || 0}
             </div>
-            <p className='text-xs text-gray-500 mt-1'>Total registered</p>
+            <p className='text-[10px] sm:text-xs text-gray-500 mt-1'>Total</p>
           </CardContent>
         </Card>
-      </div>
 
-      {/* Additional Stats Row */}
-      <div className='grid grid-cols-1 md:grid-cols-3 gap-6 mb-8'>
         <Card>
-          <CardHeader className='flex flex-row items-center justify-between pb-2'>
-            <CardTitle className='text-sm font-medium text-gray-600'>
+          <CardHeader className='flex flex-row items-center justify-between pb-2 space-y-0'>
+            <CardTitle className='text-xs sm:text-sm font-medium text-gray-600'>
               Rejected
             </CardTitle>
-            <XCircle className='h-4 w-4 text-red-600' />
+            <XCircle className='h-3 w-3 sm:h-4 sm:w-4 text-red-600' />
           </CardHeader>
           <CardContent>
-            <div className='text-3xl font-bold text-red-600'>
+            <div className='text-xl sm:text-2xl md:text-3xl font-bold text-red-600'>
               {stats?.rejected_submissions || 0}
             </div>
-            <p className='text-xs text-gray-500 mt-1'>Not approved</p>
+            <p className='text-[10px] sm:text-xs text-gray-500 mt-1'>
+              Not approved
+            </p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className='flex flex-row items-center justify-between pb-2'>
-            <CardTitle className='text-sm font-medium text-gray-600'>
+          <CardHeader className='flex flex-row items-center justify-between pb-2 space-y-0'>
+            <CardTitle className='text-xs sm:text-sm font-medium text-gray-600'>
               Approved
             </CardTitle>
-            <CheckCircle className='h-4 w-4 text-green-600' />
+            <CheckCircle className='h-3 w-3 sm:h-4 sm:w-4 text-green-600' />
           </CardHeader>
           <CardContent>
-            <div className='text-3xl font-bold text-green-600'>
+            <div className='text-xl sm:text-2xl md:text-3xl font-bold text-green-600'>
               {stats?.approved_submissions || 0}
             </div>
-            <p className='text-xs text-gray-500 mt-1'>Ready to proceed</p>
+            <p className='text-[10px] sm:text-xs text-gray-500 mt-1'>Ready</p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className='flex flex-row items-center justify-between pb-2'>
-            <CardTitle className='text-sm font-medium text-gray-600'>
-              Scheduled Meetings
+          <CardHeader className='flex flex-row items-center justify-between pb-2 space-y-0'>
+            <CardTitle className='text-xs sm:text-sm font-medium text-gray-600'>
+              Meetings
             </CardTitle>
-            <Users className='h-4 w-4 text-indigo-600' />
+            <Users className='h-3 w-3 sm:h-4 sm:w-4 text-indigo-600' />
           </CardHeader>
           <CardContent>
-            <div className='text-3xl font-bold text-indigo-600'>
+            <div className='text-xl sm:text-2xl md:text-3xl font-bold text-indigo-600'>
               {stats?.scheduled_meetings || 0}
             </div>
-            <p className='text-xs text-gray-500 mt-1'>Upcoming calls</p>
+            <p className='text-[10px] sm:text-xs text-gray-500 mt-1'>
+              Upcoming
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -262,11 +268,11 @@ export default function AdminDashboard() {
                   className='block mb-3'
                 >
                   <div className='flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors cursor-pointer'>
-                    <div className='flex-1'>
-                      <h3 className='font-semibold text-gray-900'>
+                    <div className='flex-1 min-w-0'>
+                      <h3 className='font-semibold text-gray-900 text-sm sm:text-base truncate'>
                         {submission.church_name}
                       </h3>
-                      <p className='text-sm text-gray-600'>
+                      <p className='text-xs sm:text-sm text-gray-600 truncate'>
                         {submission.property_address}
                       </p>
                       <p className='text-xs text-gray-500 mt-1'>

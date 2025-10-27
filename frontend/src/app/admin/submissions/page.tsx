@@ -19,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { getApiBaseUrl } from '@/lib/api-client';
 import {
   Building2,
   Search,
@@ -62,7 +63,7 @@ export default function AdminSubmissionsPage() {
       }
 
       const response = await fetch(
-        `http://localhost:8000/api/v1/admin/stats/submissions?${params}`,
+        `${getApiBaseUrl()}/api/v1/admin/stats/submissions?${params}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -134,13 +135,13 @@ export default function AdminSubmissionsPage() {
   }
 
   return (
-    <div className='max-w-7xl'>
+    <div className='max-w-7xl mt-2.5'>
       {/* Header */}
-      <div className='mb-8'>
-        <h1 className='text-3xl font-bold mb-2 font-[family-name:var(--font-safe-light-accent)]'>
+      <div className='mb-6 sm:mb-8'>
+        <h1 className='text-2xl sm:text-3xl font-bold mb-2 font-[family-name:var(--font-safe-light-accent)]'>
           Property Submissions
         </h1>
-        <p className='text-gray-600'>
+        <p className='text-sm sm:text-base text-gray-600'>
           Review and manage all church property submissions
         </p>
       </div>

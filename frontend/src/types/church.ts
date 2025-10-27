@@ -154,6 +154,7 @@ export interface ChurchSubmissionFormData {
   // ========== SECTION 3: OWNERSHIP & FINANCIAL ==========
   owns_property_free_clear: boolean; // CRITICAL - must be true
   willing_to_ground_lease: boolean;
+  existing_debt_amount?: number; // Existing debt/mortgage on the property
   has_mortgage?: boolean;
   mortgage_balance?: number;
   assessed_value?: number;
@@ -175,6 +176,10 @@ export interface ChurchSubmissionFormData {
   affordability_target?: AffordabilityTarget;
   revenue_sharing_preference?: RevenueSharingPreference;
   development_involvement_level?: InvolvementLevel;
+
+  // ========== SECTION 7: PROPERTY IMPROVEMENT & FINANCING NEEDS ==========
+  property_improvement_needs?: string[]; // List of needed improvements
+  capital_financing_need?: string; // Description of capital/financing needs
 }
 
 /**

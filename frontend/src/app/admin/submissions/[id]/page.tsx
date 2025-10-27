@@ -20,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { getApiBaseUrl } from '@/lib/api-client';
 import {
   Building2,
   MapPin,
@@ -81,36 +82,19 @@ interface SubmissionDetail {
   property_data_sources: string | null;
   property_building_sqft: number | null;
   property_year_built: number | null;
+  property_market_value_estimate: number | null;
 
-  // Section 3: Ownership & Financial
-  owns_property_free_clear: boolean | null;
-  has_mortgage: boolean | null;
-  mortgage_balance: number | null;
-  willing_to_ground_lease: boolean | null;
-  assessed_value: number | null;
+  // Assessment custom fields (user-provided)
+  available_build_sqft: number | null;
+  available_build_acres: number | null;
+
+  // Ownership & Financial (existing debt from assessment form)
   existing_debt_amount: number | null;
-  expects_sanctuary_replacement: boolean | null;
-  sanctuary_replacement_cost_estimate: number | null;
 
-  // Section 4: Congregation Approval
-  congregation_voted: boolean | null;
-  vote_percentage: number | null;
-  leadership_support: string | null;
-  decision_authority: string | null;
-  decision_timeline: string | null;
-  denomination_approval_needed: boolean | null;
-
-  // Section 5: Parking & Development
-  current_parking_spaces: number | null;
-  parking_spaces_needed_after: number | null;
+  // Manual form fields (from current 2-section questionnaire)
   special_requirements: string | null;
-
-  // Section 6: Timeline & Preferences
-  timeline_preference: string | null;
-  preferred_unit_count: number | null;
-  affordability_target: string | null;
-  revenue_sharing_preference: string | null;
-  development_involvement_level: string | null;
+  property_improvement_needs: string[] | null; // Array of improvement needs
+  capital_financing_need: string | null;
 
   // Assessment data (enriched)
   financial_projections: any | null;
@@ -142,7 +126,7 @@ export default function AdminSubmissionDetailPage({
     queryFn: async () => {
       const token = await getToken();
       const response = await fetch(
-        `http://localhost:8000/api/v1/admin/stats/submissions/${id}`,
+        `${getApiBaseUrl()}/api/v1/admin/stats/submissions/${id}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -163,7 +147,7 @@ export default function AdminSubmissionDetailPage({
     mutationFn: async () => {
       const token = await getToken();
       const response = await fetch(
-        `http://localhost:8000/api/v1/admin/submissions/${id}/approve`,
+        `${getApiBaseUrl()}/api/v1/admin/submissions/${id}/approve`,
         {
           method: 'POST',
           headers: {
@@ -194,7 +178,7 @@ export default function AdminSubmissionDetailPage({
     mutationFn: async () => {
       const token = await getToken();
       const response = await fetch(
-        `http://localhost:8000/api/v1/admin/submissions/${id}/reject`,
+        `${getApiBaseUrl()}/api/v1/admin/submissions/${id}/reject`,
         {
           method: 'POST',
           headers: {
@@ -226,7 +210,7 @@ export default function AdminSubmissionDetailPage({
     mutationFn: async () => {
       const token = await getToken();
       const response = await fetch(
-        `http://localhost:8000/api/v1/admin/submissions/${id}/comment`,
+        `${getApiBaseUrl()}/api/v1/admin/submissions/${id}/comment`,
         {
           method: 'POST',
           headers: {
@@ -307,9 +291,9 @@ export default function AdminSubmissionDetailPage({
   }
 
   return (
-    <div className='max-w-5xl mx-auto'>
+    <div className='max-w-5xl mx-auto w-full mt-2.5'>
       {/* Header */}
-      <div className='mb-6 flex items-center justify-between'>
+      <div className='mb-4 sm:mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4'>
         <div className='flex items-center gap-4'>
           <Link href='/admin/submissions'>
             <Button variant='outline' size='icon'>
@@ -317,18 +301,20 @@ export default function AdminSubmissionDetailPage({
             </Button>
           </Link>
           <div>
-            <h1 className='text-3xl font-bold font-[family-name:var(--font-safe-light-accent)]'>
+            <h1 className='text-xl sm:text-2xl lg:text-3xl font-bold font-[family-name:var(--font-safe-light-accent)]'>
               {submission.church_name}
             </h1>
-            <p className='text-gray-600'>Submission ID: {submission.id}</p>
+            <p className='text-sm text-gray-600'>
+              Submission ID: {submission.id}
+            </p>
             {submission.property_street_address && (
-              <p className='text-sm text-gray-500'>
+              <p className='text-xs sm:text-sm text-gray-500'>
                 {submission.property_street_address}
               </p>
             )}
           </div>
         </div>
-        <div className='flex flex-col gap-2 items-end'>
+        <div className='flex flex-col gap-2 items-start sm:items-end'>
           <Badge
             className={getStatusColor(submission.status)}
             variant='outline'
@@ -336,8 +322,8 @@ export default function AdminSubmissionDetailPage({
             {submission.status}
           </Badge>
           {submission.overall_score && (
-            <div className='text-right'>
-              <div className='text-2xl font-bold text-blue-600'>
+            <div className='text-left sm:text-right'>
+              <div className='text-xl sm:text-2xl font-bold text-blue-600'>
                 {submission.overall_score.toFixed(1)}
               </div>
               <div className='text-xs text-gray-500'>Overall Score</div>
@@ -347,17 +333,19 @@ export default function AdminSubmissionDetailPage({
       </div>
 
       {/* Quick Actions - AI Assessment & Download */}
-      <div className='mb-6 grid grid-cols-2 gap-3'>
+      <div className='mb-4 sm:mb-6 grid grid-cols-1 sm:grid-cols-2 gap-3'>
         <Link href={`/admin/submissions/${id}/assessment`}>
           <Button
             variant='default'
-            className='w-full py-6 text-lg bg-blue-600 hover:bg-blue-700'
+            className='w-full py-4 sm:py-6 text-base sm:text-lg bg-blue-600 hover:bg-blue-700'
             disabled={!submission.overall_score}
           >
-            <TrendingUp className='h-5 w-5 mr-2' />
-            {submission.overall_score
-              ? 'Full Development Analysis'
-              : 'Analysis Pending...'}
+            <TrendingUp className='h-4 w-5 sm:h-5 sm:w-5 mr-2 flex-shrink-0' />
+            <span className='truncate'>
+              {submission.overall_score
+                ? 'Full Development Analysis'
+                : 'Analysis Pending...'}
+            </span>
           </Button>
         </Link>
         <Button
@@ -367,7 +355,7 @@ export default function AdminSubmissionDetailPage({
 
               const token = await getToken();
               const response = await fetch(
-                `http://localhost:8000/api/v1/reports/assessment/${id}/download-v2`,
+                `${getApiBaseUrl()}/api/v1/reports/assessment/${id}/download-v2`,
                 {
                   headers: {
                     Authorization: `Bearer ${token}`,
@@ -403,10 +391,10 @@ export default function AdminSubmissionDetailPage({
               });
             }
           }}
-          className='w-full py-6 px-8 text-lg bg-gradient-to-r from-yellow-500 to-yellow-700 hover:from-yellow-600 hover:to-yellow-800'
+          className='w-full py-4 sm:py-6 px-4 sm:px-8 text-base sm:text-lg bg-gradient-to-r from-yellow-500 to-yellow-700 hover:from-yellow-600 hover:to-yellow-800'
           disabled={!submission.overall_score}
         >
-          Download Summary Report
+          <span className='truncate'>Download Summary Report</span>
         </Button>
       </div>
 
@@ -529,15 +517,15 @@ export default function AdminSubmissionDetailPage({
       </Dialog>
 
       {/* Entity Information */}
-      <Card className='mb-6'>
+      <Card className='mb-4 sm:mb-6'>
         <CardHeader>
-          <CardTitle className='flex items-center gap-2'>
+          <CardTitle className='flex items-center gap-2 text-lg sm:text-xl'>
             <Building2 className='h-5 w-5' />
             Entity Information
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className='grid grid-cols-1 md:grid-cols-2 gap-4 mb-6'>
+          <div className='grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6'>
             <div>
               <label className='text-sm font-medium text-gray-500'>
                 Entity Name
@@ -615,23 +603,36 @@ export default function AdminSubmissionDetailPage({
       </Card>
 
       {/* Ownership & Financial */}
-      {(submission.assessed_value || submission.existing_debt_amount) && (
-        <Card className='mb-6'>
+      {(submission.property_assessed_value ||
+        submission.property_market_value_estimate ||
+        submission.existing_debt_amount) && (
+        <Card className='mb-4 sm:mb-6'>
           <CardHeader>
-            <CardTitle className='flex items-center gap-2'>
+            <CardTitle className='flex items-center gap-2 text-lg sm:text-xl'>
               <DollarSign className='h-5 w-5' />
               Ownership & Financial
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
-              {submission.assessed_value && (
+            <div className='grid grid-cols-1 md:grid-cols-3 gap-4'>
+              {submission.property_assessed_value && (
                 <div>
                   <label className='text-sm font-medium text-gray-500'>
-                    Owner Reported Current Value
+                    Property Assessed Value (City/County)
                   </label>
                   <p className='mt-1 text-lg font-semibold'>
-                    ${submission.assessed_value.toLocaleString()}
+                    ${submission.property_assessed_value.toLocaleString()}
+                  </p>
+                </div>
+              )}
+              {submission.property_market_value_estimate && (
+                <div>
+                  <label className='text-sm font-medium text-gray-500'>
+                    Owner Reported Value
+                  </label>
+                  <p className='mt-1 text-lg font-semibold'>
+                    $
+                    {submission.property_market_value_estimate.toLocaleString()}
                   </p>
                 </div>
               )}
@@ -650,10 +651,74 @@ export default function AdminSubmissionDetailPage({
         </Card>
       )}
 
+      {/* Property Needs & Financing */}
+      {(submission.property_improvement_needs ||
+        submission.capital_financing_need ||
+        submission.special_requirements) && (
+        <Card className='mb-4 sm:mb-6'>
+          <CardHeader>
+            <CardTitle className='flex items-center gap-2 text-lg sm:text-xl'>
+              <DollarSign className='h-5 w-5' />
+              Property Needs & Financing
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {submission.property_improvement_needs &&
+              Array.isArray(submission.property_improvement_needs) &&
+              submission.property_improvement_needs.length > 0 && (
+                <div className='mb-4'>
+                  <label className='text-sm font-medium text-gray-500 block mb-2'>
+                    Property Improvement Needs
+                  </label>
+                  <div className='flex flex-wrap gap-2'>
+                    {submission.property_improvement_needs.map(
+                      (need: string) => {
+                        const labels: Record<string, string> = {
+                          hvac: 'HVAC/AC System',
+                          roof: 'Roof',
+                          landscaping: 'Landscaping',
+                          painting: 'Painting',
+                          interior: 'Interior Improvements',
+                          other: 'Other',
+                        };
+                        return (
+                          <Badge key={need} variant='secondary'>
+                            {labels[need] || need}
+                          </Badge>
+                        );
+                      }
+                    )}
+                  </div>
+                </div>
+              )}
+            {submission.capital_financing_need && (
+              <div className='mb-4'>
+                <label className='text-sm font-medium text-gray-500 block mb-2'>
+                  Capital/Financing Need
+                </label>
+                <p className='text-sm text-gray-700 bg-gray-50 p-3 rounded-md'>
+                  {submission.capital_financing_need}
+                </p>
+              </div>
+            )}
+            {submission.special_requirements && (
+              <div>
+                <label className='text-sm font-medium text-gray-500 block mb-2'>
+                  Special Requirements / Considerations
+                </label>
+                <p className='text-sm text-gray-700 bg-gray-50 p-3 rounded-md'>
+                  {submission.special_requirements}
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Notes Section */}
-      <Card className='mb-6'>
+      <Card className='mb-4 sm:mb-6'>
         <CardHeader>
-          <CardTitle className='flex items-center gap-2'>
+          <CardTitle className='flex items-center gap-2 text-lg sm:text-xl'>
             <MessageSquare className='h-5 w-5' />
             Notes
           </CardTitle>
@@ -784,7 +849,7 @@ export default function AdminSubmissionDetailPage({
       </Card>
 
       {/* Action Buttons */}
-      <div className='flex gap-3 mb-6'>
+      <div className='flex flex-col sm:flex-row gap-3 mb-6'>
         <Button
           onClick={() => setShowApproveDialog(true)}
           disabled={submission.status === 'approved'}

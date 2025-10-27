@@ -407,10 +407,19 @@ class AssessmentDetail(BaseModel):
     property_year_built: Optional[int]
     property_additional_addresses: Optional[List[Dict[str, Any]]]  # Additional addresses with enriched data
     property_demolish_all_structures: Optional[bool]
+    property_market_value_estimate: Optional[float]
     
     # Assessment custom fields (user-provided values)
     available_build_sqft: Optional[float]
     available_build_acres: Optional[float]
+    
+    # Ownership & Financial (existing debt from assessment form)
+    existing_debt_amount: Optional[float]
+    
+    # New manual form fields (from current 2-section questionnaire)
+    special_requirements: Optional[str]
+    property_improvement_needs: Optional[List[str]]  # List of improvement needs
+    capital_financing_need: Optional[str]
     
     class Config:
         from_attributes = True
@@ -483,9 +492,16 @@ async def get_submission_detail(
             Property.year_built.label("property_year_built"),
             Property.additional_addresses.label("property_additional_addresses"),
             Property.demolish_all_structures.label("property_demolish_all_structures"),
+            Property.market_value_estimate.label("property_market_value_estimate"),
             # Assessment user inputs
             Assessment.available_build_sqft,
             Assessment.available_build_acres,
+            # Ownership & Financial (from form)
+            Assessment.existing_debt_amount,
+            # New manual form fields (from current 2-section form)
+            Assessment.special_requirements,
+            Assessment.property_improvement_needs,
+            Assessment.capital_financing_need,
         )
         .join(Church, Assessment.church_id == Church.id)
         .join(Property, Assessment.property_id == Property.id)
@@ -554,7 +570,14 @@ async def get_submission_detail(
         property_year_built=row.property_year_built,
         property_additional_addresses=row.property_additional_addresses,
         property_demolish_all_structures=row.property_demolish_all_structures,
+        property_market_value_estimate=row.property_market_value_estimate,
         # Assessment custom fields
         available_build_sqft=row.available_build_sqft,
         available_build_acres=row.available_build_acres,
+        # Ownership & Financial (existing debt from assessment form)
+        existing_debt_amount=row.existing_debt_amount,
+        # New manual form fields (from current 2-section form)
+        special_requirements=row.special_requirements,
+        property_improvement_needs=row.property_improvement_needs,
+        capital_financing_need=row.capital_financing_need,
     )

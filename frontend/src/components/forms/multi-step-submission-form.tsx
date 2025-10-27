@@ -165,9 +165,8 @@ export function MultiStepSubmissionForm() {
           // Reset form with saved data
           form.reset(parsedDraft);
           toast.info('Draft loaded! Continue where you left off.');
-          console.log('✅ Loaded draft from localStorage:', parsedDraft);
         } catch (error) {
-          console.error('❌ Failed to load draft:', error);
+          // Silent fail - draft loading is not critical
           localStorage.removeItem(DRAFT_STORAGE_KEY);
         }
       }
@@ -189,7 +188,6 @@ export function MultiStepSubmissionForm() {
         localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(data));
         localStorage.setItem(DRAFT_STEP_KEY, currentStep.toString());
         setLastSaved(new Date());
-        console.log('💾 Draft auto-saved');
       }
     });
 
@@ -201,15 +199,10 @@ export function MultiStepSubmissionForm() {
     if (typeof window !== 'undefined') {
       localStorage.removeItem(DRAFT_STORAGE_KEY);
       localStorage.removeItem(DRAFT_STEP_KEY);
-      console.log('🗑️ Draft cleared');
     }
   };
 
   const handleNext = async () => {
-    console.log(
-      `⏭️ handleNext called - Current step: ${currentStep} of ${STEPS.length}`
-    );
-
     // Get the fields for the current step
     const fieldsToValidate =
       STEP_FIELDS[currentStep as keyof typeof STEP_FIELDS];

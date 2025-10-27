@@ -22,10 +22,10 @@ export default function HomePage() {
     <>
       {/* Role-based redirect now happens in middleware.ts - no flash! */}
 
-      <div className='min-h-screen bg-gradient-to-b from-blue-50 to-white'>
+      <div className='fixed inset-0 overflow-hidden bg-gradient-to-b from-blue-50 to-white'>
         {/* Hero Section */}
-        <div className='container mx-auto px-4 py-8'>
-          <nav className='flex justify-between items-center mb-8 mt-20'>
+        <div className='container mx-auto px-4 h-full flex flex-col justify-center -mt-[70px] md:pt-0 md:-mt-16'>
+          <nav className='flex justify-between items-center mb-4 md:mb-12 mt-[100px] md:mt-0'>
             <div className='flex-1 flex justify-center'>
               <Image
                 src='/home-logos.png'
@@ -35,7 +35,7 @@ export default function HomePage() {
                 className='object-contain'
               />
             </div>
-            <div className='flex gap-4 absolute right-8 top-28'>
+            <div className='flex gap-4 absolute right-4 md:right-8 top-28 md:top-20'>
               {isLoaded && (
                 <>
                   {isSignedIn ? (
@@ -44,7 +44,7 @@ export default function HomePage() {
                     </Button>
                   ) : (
                     <Link href='/sign-up'>
-                      <Button>Get Started</Button>
+                      <Button>Sign Up</Button>
                     </Link>
                   )}
                 </>
@@ -53,7 +53,7 @@ export default function HomePage() {
           </nav>
 
           <div className='max-w-4xl mx-auto text-center'>
-            <h1 className='text-5xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent'>
+            <h1 className='text-3xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent max-w-[280px] md:max-w-none mx-auto'>
               Transforming Underutilized Land Into Housing
             </h1>
             <p className='text-xl text-gray-600 mb-8'>

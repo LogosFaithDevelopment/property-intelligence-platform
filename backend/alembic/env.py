@@ -74,6 +74,12 @@ def run_migrations_online() -> None:
     elif 'postgresql://' in db_url and '+' not in db_url:
         db_url = db_url.replace('postgresql://', 'postgresql+psycopg2://')
     
+    # Convert asyncpg SSL parameter to psycopg2 format
+    if '?ssl=require' in db_url:
+        db_url = db_url.replace('?ssl=require', '?sslmode=require')
+    elif '&ssl=require' in db_url:
+        db_url = db_url.replace('&ssl=require', '&sslmode=require')
+    
     configuration['sqlalchemy.url'] = db_url
     
     connectable = engine_from_config(

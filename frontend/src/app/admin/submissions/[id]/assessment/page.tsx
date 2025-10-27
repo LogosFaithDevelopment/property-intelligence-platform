@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
+import { getApiBaseUrl } from '@/lib/api-client';
 
 interface SubmissionDetail {
   id: number;
@@ -86,7 +87,7 @@ export default function AssessmentVisualizationPage({
     queryFn: async () => {
       const token = await getToken();
       const response = await fetch(
-        `http://localhost:8000/api/v1/admin/stats/submissions/${id}`,
+        `${getApiBaseUrl()}/api/v1/admin/stats/submissions/${id}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -211,28 +212,30 @@ export default function AssessmentVisualizationPage({
   })();
 
   return (
-    <div className='max-w-7xl mx-auto pb-12'>
-      {/* Header */}
-      <div className='mb-6 flex items-center justify-between'>
-        <div className='flex items-center gap-4'>
+    <div className='w-full max-w-full sm:max-w-4xl lg:max-w-7xl mx-auto pb-8 sm:pb-12 overflow-x-hidden'>
+      {/* Header - Add top margin on mobile to account for fixed nav bar */}
+      <div className='mb-4 sm:mb-6 mt-4 sm:mt-0 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4'>
+        <div className='flex items-center gap-4 w-full sm:w-auto'>
           <Link href={`/admin/submissions/${id}`}>
-            <Button variant='outline' size='icon'>
+            <Button variant='outline' size='icon' className='flex-shrink-0'>
               <ArrowLeft className='h-4 w-4' />
             </Button>
           </Link>
-          <div>
-            <h1 className='text-3xl font-bold font-[family-name:var(--font-safe-light-accent)]'>
+          <div className='min-w-0 flex-1'>
+            <h1 className='text-xl sm:text-2xl md:text-3xl font-bold font-[family-name:var(--font-safe-light-accent)] break-words'>
               {submission.church_name}
             </h1>
-            <p className='text-gray-600'>Grading Analytics & Assessment</p>
+            <p className='text-sm sm:text-base text-gray-600'>
+              Grading Analytics & Assessment
+            </p>
             {submission.property_street_address && (
-              <p className='text-sm text-gray-500'>
+              <p className='text-xs sm:text-sm text-gray-500 truncate'>
                 {submission.property_street_address}
               </p>
             )}
           </div>
         </div>
-        <div className='flex items-center gap-4'>
+        <div className='flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end'>
           <Button
             onClick={async () => {
               try {
@@ -241,7 +244,7 @@ export default function AssessmentVisualizationPage({
                 });
                 const token = await getToken();
                 const response = await fetch(
-                  `http://localhost:8000/api/v1/reports/assessment/${id}/download-v2`,
+                  `${getApiBaseUrl()}/api/v1/reports/assessment/${id}/download-v2`,
                   {
                     headers: {
                       Authorization: `Bearer ${token}`,
@@ -276,201 +279,206 @@ export default function AssessmentVisualizationPage({
                 });
               }
             }}
-            className='bg-gradient-to-r from-yellow-500 to-yellow-700 hover:from-yellow-600 hover:to-yellow-800'
+            className='bg-gradient-to-r from-yellow-500 to-yellow-700 hover:from-yellow-600 hover:to-yellow-800 text-sm sm:text-base whitespace-nowrap'
           >
-            Download Report
+            <span className='hidden sm:inline'>Download Report</span>
+            <span className='sm:hidden'>Download</span>
           </Button>
           <div className='text-right'>
-            <div className={`text-5xl font-bold ${getStatusColor(score)}`}>
+            <div
+              className={`text-3xl sm:text-4xl md:text-5xl font-bold ${getStatusColor(
+                score
+              )}`}
+            >
               {grade}
             </div>
-            <div className='text-2xl font-semibold text-gray-700'>
+            <div className='text-lg sm:text-xl md:text-2xl font-semibold text-gray-700'>
               {score.toFixed(1)}/100
             </div>
-            <div className='text-xs text-gray-500 mt-1'>Overall Score</div>
+            <div className='text-[10px] sm:text-xs text-gray-500 mt-1'>
+              Overall Score
+            </div>
           </div>
         </div>
       </div>
 
       {/* 📊 FINANCIAL PROJECTIONS & ANALYSIS - MOVED UP */}
       {submission.financial_projections && (
-        <Card className='mb-6'>
-          <CardHeader>
-            <CardTitle className='flex items-center gap-2 font-[family-name:var(--font-safe-light-accent)]'>
-              <DollarSign className='h-5 w-5' />
+        <Card className='mb-4 sm:mb-6'>
+          <CardHeader className='p-3 sm:p-4 md:p-6 pb-0'>
+            <CardTitle className='flex items-center gap-2 font-[family-name:var(--font-safe-light-accent)] text-sm sm:text-base md:text-lg'>
+              <DollarSign className='h-4 w-4 sm:h-5 sm:w-5' />
               Financial Projections & Analysis
             </CardTitle>
           </CardHeader>
-          <CardContent className='space-y-6'>
+          <CardContent className='space-y-3 sm:space-y-4 md:space-y-6 -mt-8 px-3 sm:px-4 md:px-6 pb-3 sm:pb-4 md:pb-6'>
             {/* 🎯 IRR & INVESTMENT RETURNS - FEATURED SECTION */}
-            {submission.financial_projections.revenue_projections
-              ?.irr_analysis && (
-              <div className='bg-gradient-to-br from-emerald-50 to-green-50 rounded-lg p-6 border-2 border-green-300'>
-                <div className='flex items-center justify-between mb-4 flex-wrap gap-2'>
-                  <h3 className='text-2xl font-bold text-green-800 flex items-center gap-2 font-[family-name:var(--font-safe-light-accent)]'>
-                    <TrendingUp className='h-6 w-6' />
-                    IRR & Investment Returns
-                  </h3>
-                  {submission.financial_projections.revenue_projections
-                    .irr_analysis.meets_logos_target && (
-                    <Badge className='bg-green-600 text-white text-base px-4 py-1.5'>
-                      MEETS 20% TARGET
-                    </Badge>
-                  )}
-                </div>
+            {submission.financial_projections.multi_story_scenarios &&
+              (() => {
+                // Get recommended scenario data
+                const recommended =
+                  submission.financial_projections.multi_story_scenarios
+                    .recommended;
+                const recommendedScenario =
+                  submission.financial_projections.multi_story_scenarios
+                    .scenarios?.[recommended];
 
-                {/* Main IRR Display */}
-                <div className='text-center bg-white rounded-lg p-6 mb-4 border-2 border-green-400'>
-                  <p className='text-sm text-gray-600 mb-2'>
-                    7-Year IRR (with Tax Benefits)
-                  </p>
-                  <p className='text-6xl font-bold text-green-700 mb-2'>
-                    {submission.financial_projections.revenue_projections.irr_analysis.irr_percent?.toFixed(
-                      1
-                    )}
-                    %
-                  </p>
-                  <p className='text-base text-gray-600'>
-                    Target: 20% minimum • Exit Cap:{' '}
-                    {(
-                      (submission.financial_projections.revenue_projections
-                        .irr_analysis.exit_cap_rate || 0.0425) * 100
-                    ).toFixed(2)}
-                    % • Rent Growth:{' '}
-                    {(
-                      (submission.financial_projections.revenue_projections
-                        .irr_analysis.annual_rent_growth || 0.03) * 100
-                    ).toFixed(0)}
-                    %/yr
-                  </p>
-                </div>
-
-                {/* Tax Benefits Breakdown */}
-                {(submission.financial_projections.revenue_projections
-                  .irr_analysis.lihtc_proceeds ||
+                // Get constants from revenue_projections (same across all scenarios)
+                const exitCapRate =
                   submission.financial_projections.revenue_projections
-                    .irr_analysis.annual_property_tax_savings) && (
-                  <div className='grid grid-cols-1 md:grid-cols-2 gap-4 mb-4'>
-                    {/* LIHTC 4% Credits */}
-                    {submission.financial_projections.revenue_projections
-                      .irr_analysis.lihtc_proceeds && (
-                      <div className='bg-blue-50 rounded-lg p-4 border border-blue-200'>
-                        <p className='text-sm font-semibold text-blue-900 mb-2'>
-                          🏆 LIHTC 4% Tax Credits
-                        </p>
-                        <p className='text-2xl font-bold text-blue-700 mb-1'>
-                          $
-                          {submission.financial_projections.revenue_projections.irr_analysis.lihtc_proceeds?.toLocaleString()}
-                        </p>
-                        <p className='text-xs text-gray-600'>
-                          Syndication proceeds (received at construction)
-                        </p>
-                      </div>
-                    )}
-
-                    {/* CA Welfare Exemption */}
-                    {submission.financial_projections.revenue_projections
-                      .irr_analysis.annual_property_tax_savings && (
-                      <div className='bg-amber-50 rounded-lg p-4 border border-amber-200'>
-                        <p className='text-sm font-semibold text-amber-900 mb-2'>
-                          💸 CA Welfare Tax Exemption
-                        </p>
-                        <p className='text-2xl font-bold text-amber-700 mb-1'>
-                          $
-                          {submission.financial_projections.revenue_projections.irr_analysis.annual_property_tax_savings?.toLocaleString()}
-                          /yr
-                        </p>
-                        <p className='text-xs text-gray-600'>
-                          98% property tax savings (increases NOI)
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Equity Analysis */}
-                {(submission.financial_projections.revenue_projections
-                  .irr_analysis.gross_equity_required ||
+                    ?.irr_analysis?.exit_cap_rate || 0.06;
+                const rentGrowth =
                   submission.financial_projections.revenue_projections
-                    .irr_analysis.net_equity_required) && (
-                  <div className='bg-purple-50 rounded-lg p-4 border border-purple-200 mb-4'>
-                    <p className='text-sm font-semibold text-purple-900 mb-3'>
-                      💼 Equity Analysis
-                    </p>
-                    <div className='grid grid-cols-3 gap-4 text-center'>
-                      <div>
-                        <p className='text-xs text-gray-600 mb-1'>
-                          Gross Equity (20%)
-                        </p>
-                        <p className='text-lg font-bold text-purple-700'>
-                          $
-                          {submission.financial_projections.revenue_projections.irr_analysis.gross_equity_required?.toLocaleString() ||
-                            'N/A'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className='text-xs text-gray-600 mb-1'>
-                          LIHTC Reduction
-                        </p>
-                        <p className='text-lg font-bold text-green-700'>
-                          -$
-                          {submission.financial_projections.revenue_projections.irr_analysis.equity_reduction_from_lihtc?.toLocaleString() ||
-                            '0'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className='text-xs text-gray-600 mb-1'>
-                          Net Equity Required
-                        </p>
-                        <p className='text-lg font-bold text-emerald-700'>
-                          $
-                          {submission.financial_projections.revenue_projections.irr_analysis.net_equity_required?.toLocaleString() ||
-                            'N/A'}
-                        </p>
-                        {submission.financial_projections.revenue_projections
-                          .irr_analysis.essentially_zero_equity && (
-                          <p className='text-[10px] text-green-600 font-semibold mt-1'>
-                            ESSENTIALLY ZERO!
-                          </p>
-                        )}
-                      </div>
+                    ?.irr_analysis?.annual_rent_growth || 0.03;
+
+                if (!recommendedScenario) return null;
+
+                // Calculate derived values for recommended scenario
+                const firstYearNOI = recommendedScenario.noi || 0;
+                const finalYearNOI = firstYearNOI * Math.pow(1 + rentGrowth, 6); // 6 years of growth
+                const exitValue =
+                  exitCapRate > 0 ? finalYearNOI / exitCapRate : 0;
+
+                // Calculate tiered brokerage fee (2.0%-5.0% based on property value)
+                const getBrokerageFee = (value: number) => {
+                  if (value < 10_000_000)
+                    return { rate: 0.05, tier: '5.0% (under $10M)' };
+                  if (value < 20_000_000)
+                    return { rate: 0.04, tier: '4.0% ($10M-$20M)' };
+                  if (value < 30_000_000)
+                    return { rate: 0.03, tier: '3.0% ($20M-$30M)' };
+                  if (value < 40_000_000)
+                    return { rate: 0.025, tier: '2.5% ($30M-$40M)' };
+                  return { rate: 0.02, tier: '2.0% (over $40M)' };
+                };
+
+                const brokerage = getBrokerageFee(exitValue);
+                const brokerageFee = exitValue * brokerage.rate;
+                const netExitValue = exitValue - brokerageFee;
+
+                // Calculate exit proceeds (65% permanent loan per updated model)
+                const debtAmount =
+                  (recommendedScenario.total_development_cost || 0) * 0.65;
+                const exitProceeds = netExitValue - debtAmount;
+
+                const meetsTarget =
+                  (recommendedScenario.irr_percent || 0) >= 20.0;
+
+                return (
+                  <div className='bg-gradient-to-br from-emerald-50 to-green-50 rounded-lg p-3 sm:p-4 md:p-6 border-2 border-green-300'>
+                    <div className='flex items-center justify-between mb-3 sm:mb-4 flex-wrap gap-2'>
+                      <h3 className='text-lg sm:text-xl md:text-2xl font-bold text-green-800 flex items-center gap-2 font-[family-name:var(--font-safe-light-accent)]'>
+                        <TrendingUp className='h-5 w-5 sm:h-6 sm:w-6' />
+                        IRR & Investment Returns
+                        <span className='text-sm font-normal text-gray-600'>
+                          ({recommended.replace('_', '-').toUpperCase()})
+                        </span>
+                      </h3>
+                      {meetsTarget && (
+                        <Badge className='bg-green-600 text-white text-xs sm:text-sm md:text-base px-2 sm:px-3 md:px-4 py-1 sm:py-1.5'>
+                          MEETS 20% TARGET
+                        </Badge>
+                      )}
                     </div>
-                  </div>
-                )}
 
-                {/* Key Highlights */}
-                {submission.financial_projections.revenue_projections
-                  .irr_analysis.highlights &&
-                  submission.financial_projections.revenue_projections
-                    .irr_analysis.highlights.length > 0 && (
+                    {/* Main IRR Display */}
+                    <div className='text-center bg-white rounded-lg p-4 sm:p-5 md:p-6 mb-3 sm:mb-4 border-2 border-green-400'>
+                      <p className='text-xs sm:text-sm text-gray-600 mb-2'>
+                        7-Year IRR (Recommended Scenario)
+                      </p>
+                      <p className='text-4xl sm:text-5xl md:text-6xl font-bold text-green-700 mb-2'>
+                        {recommendedScenario.irr_percent?.toFixed(1)}%
+                      </p>
+                      <p className='text-base text-gray-600'>
+                        Target: 20% minimum • Exit Cap:{' '}
+                        {(exitCapRate * 100).toFixed(2)}% • Rent Growth:{' '}
+                        {(rentGrowth * 100).toFixed(0)}%/yr
+                      </p>
+                    </div>
+
+                    {/* Key Highlights - Using Recommended Scenario Data */}
                     <div className='bg-white rounded-lg p-4 border border-gray-200'>
                       <p className='text-sm font-semibold text-gray-700 mb-3 font-[family-name:var(--font-safe-light-accent)]'>
                         Key Highlights
                       </p>
                       <div className='grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-2'>
-                        {submission.financial_projections.revenue_projections.irr_analysis.highlights.map(
-                          (highlight: string, idx: number) => (
-                            <div
-                              key={idx}
-                              className='flex items-start gap-2 text-sm text-gray-700'
-                            >
-                              <CheckCircle className='h-4 w-4 text-green-600 flex-shrink-0 mt-0.5' />
-                              <span>{highlight}</span>
-                            </div>
-                          )
-                        )}
+                        <div className='flex items-start gap-2 text-sm text-gray-700'>
+                          <CheckCircle className='h-4 w-4 text-green-600 flex-shrink-0 mt-0.5' />
+                          <span>
+                            Equity required: $
+                            {recommendedScenario.equity_required?.toLocaleString()}{' '}
+                            (20%)
+                          </span>
+                        </div>
+                        <div className='flex items-start gap-2 text-sm text-gray-700'>
+                          <CheckCircle className='h-4 w-4 text-green-600 flex-shrink-0 mt-0.5' />
+                          <span>
+                            Permanent loan: ${debtAmount.toLocaleString()} (65%
+                            LTV)
+                          </span>
+                        </div>
+                        <div className='flex items-start gap-2 text-sm text-gray-700'>
+                          <CheckCircle className='h-4 w-4 text-green-600 flex-shrink-0 mt-0.5' />
+                          <span>
+                            First year NOI: ${firstYearNOI.toLocaleString()}
+                          </span>
+                        </div>
+                        <div className='flex items-start gap-2 text-sm text-gray-700'>
+                          <CheckCircle className='h-4 w-4 text-green-600 flex-shrink-0 mt-0.5' />
+                          <span>
+                            Final year NOI: $
+                            {Math.round(finalYearNOI).toLocaleString()} (with{' '}
+                            {(rentGrowth * 100).toFixed(0)}% growth)
+                          </span>
+                        </div>
+                        <div className='flex items-start gap-2 text-sm text-gray-700'>
+                          <CheckCircle className='h-4 w-4 text-green-600 flex-shrink-0 mt-0.5' />
+                          <span>
+                            Exit value: $
+                            {Math.round(exitValue).toLocaleString()} at{' '}
+                            {(exitCapRate * 100).toFixed(1)}% cap
+                          </span>
+                        </div>
+                        <div className='flex items-start gap-2 text-sm text-gray-700'>
+                          <CheckCircle className='h-4 w-4 text-green-600 flex-shrink-0 mt-0.5' />
+                          <span>
+                            Brokerage fee ({brokerage.tier}): $
+                            {Math.round(brokerageFee).toLocaleString()}
+                          </span>
+                        </div>
+                        <div className='flex items-start gap-2 text-sm text-gray-700'>
+                          <CheckCircle className='h-4 w-4 text-green-600 flex-shrink-0 mt-0.5' />
+                          <span>
+                            Net exit proceeds: $
+                            {Math.round(exitProceeds).toLocaleString()}
+                          </span>
+                        </div>
+                        <div className='flex items-start gap-2 text-sm text-gray-700'>
+                          <CheckCircle className='h-4 w-4 text-green-600 flex-shrink-0 mt-0.5' />
+                          <span>
+                            Units: {recommendedScenario.units} (
+                            {recommendedScenario.stories}-story)
+                          </span>
+                        </div>
+                        <div className='flex items-start gap-2 text-sm text-gray-700'>
+                          <CheckCircle className='h-4 w-4 text-green-600 flex-shrink-0 mt-0.5' />
+                          <span>
+                            IRR: {recommendedScenario.irr_percent?.toFixed(1)}%{' '}
+                            {meetsTarget ? 'MEETS' : 'below'} 20% target
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  )}
-              </div>
-            )}
+                  </div>
+                );
+              })()}
             {submission.financial_projections?.multi_story_scenarios && (
-              <Card className='mb-6'>
-                <CardHeader>
-                  <CardTitle className='flex text-lg items-center gap-2 font-[family-name:var(--font-safe-light-accent)]'>
+              <Card className='mb-4 sm:mb-6'>
+                <CardHeader className='p-4 sm:p-6'>
+                  <CardTitle className='flex text-base sm:text-lg items-center gap-2 font-[family-name:var(--font-safe-light-accent)]'>
                     Development Scenarios Analysis
                   </CardTitle>
-                  <p className='text-sm text-gray-600 mt-2'>
+                  <p className='text-xs sm:text-sm text-gray-600 mt-2'>
                     Construction cost: 3-story $275K, 4-story $325K, 5-story
                     $415K , 425 sqft planning factor (gross area), 20% equity /
                     80% debt financing
@@ -483,216 +491,223 @@ export default function AssessmentVisualizationPage({
                   </p>
                 </CardHeader>
                 <CardContent>
-                  <div className='overflow-x-auto'>
-                    <table className='w-full border-collapse'>
-                      <thead>
-                        <tr className='bg-blue-600 text-white'>
-                          <th className='border border-gray-300 px-4 py-2 text-left'>
-                            Scenario
-                          </th>
-                          <th className='border border-gray-300 px-4 py-2 text-right'>
-                            Units
-                          </th>
-                          <th className='border border-gray-300 px-4 py-2 text-right'>
-                            IRR
-                          </th>
-                          <th className='border border-gray-300 px-4 py-2 text-right'>
-                            Year 1 NOI
-                          </th>
-                          <th className='border border-gray-300 px-4 py-2 text-right'>
-                            Total Project Cost
-                          </th>
-                          <th className='border border-gray-300 px-4 py-2 text-right'>
-                            Equity (20%)
-                          </th>
-                          <th className='border border-gray-300 px-4 py-2 text-right'>
-                            Debt (80%)
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {submission.financial_projections.multi_story_scenarios
-                          .scenarios?.['3_story'] && (
-                          <tr
-                            className={
-                              submission.financial_projections
-                                .multi_story_scenarios.recommended === '3_story'
-                                ? 'bg-green-50 hover:bg-green-100'
-                                : 'bg-white hover:bg-gray-50'
-                            }
-                          >
-                            <td className='border border-gray-300 px-4 py-2 font-medium'>
-                              3-Story
-                              {submission.financial_projections
-                                .multi_story_scenarios.recommended ===
-                                '3_story' && (
-                                <Badge className='ml-2 bg-green-600'>
-                                  Recommended
-                                </Badge>
-                              )}
-                            </td>
-                            <td className='border border-gray-300 px-4 py-2 text-right'>
-                              {submission.financial_projections.multi_story_scenarios.scenarios[
-                                '3_story'
-                              ].units.toLocaleString()}
-                            </td>
-                            <td className='border border-gray-300 px-4 py-2 text-right font-semibold text-green-600'>
-                              {submission.financial_projections
-                                .multi_story_scenarios.scenarios['3_story']
-                                .irr_percent
-                                ? `${submission.financial_projections.multi_story_scenarios.scenarios[
+                  <div className='overflow-x-auto -mx-4 sm:mx-0'>
+                    <div className='inline-block min-w-full align-middle'>
+                      <div className='overflow-hidden'>
+                        <table className='w-full border-collapse min-w-[640px]'>
+                          <thead>
+                            <tr className='bg-blue-600 text-white'>
+                              <th className='border border-gray-300 px-2 sm:px-4 py-2 text-left text-xs sm:text-sm'>
+                                Scenario
+                              </th>
+                              <th className='border border-gray-300 px-2 sm:px-4 py-2 text-right text-xs sm:text-sm'>
+                                Units
+                              </th>
+                              <th className='border border-gray-300 px-2 sm:px-4 py-2 text-right text-xs sm:text-sm'>
+                                IRR
+                              </th>
+                              <th className='border border-gray-300 px-2 sm:px-4 py-2 text-right text-xs sm:text-sm'>
+                                Year 1 NOI
+                              </th>
+                              <th className='border border-gray-300 px-2 sm:px-4 py-2 text-right text-xs sm:text-sm'>
+                                Total Cost
+                              </th>
+                              <th className='border border-gray-300 px-2 sm:px-4 py-2 text-right text-xs sm:text-sm'>
+                                Equity
+                              </th>
+                              <th className='border border-gray-300 px-2 sm:px-4 py-2 text-right text-xs sm:text-sm'>
+                                Debt
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {submission.financial_projections
+                              .multi_story_scenarios.scenarios?.['3_story'] && (
+                              <tr
+                                className={
+                                  submission.financial_projections
+                                    .multi_story_scenarios.recommended ===
+                                  '3_story'
+                                    ? 'bg-green-50 hover:bg-green-100'
+                                    : 'bg-white hover:bg-gray-50'
+                                }
+                              >
+                                <td className='border border-gray-300 px-2 sm:px-4 py-2 font-medium text-xs sm:text-sm'>
+                                  3-Story
+                                  {submission.financial_projections
+                                    .multi_story_scenarios.recommended ===
+                                    '3_story' && (
+                                    <Badge className='ml-1 sm:ml-2 bg-green-600 text-[10px] sm:text-xs'>
+                                      Recommended
+                                    </Badge>
+                                  )}
+                                </td>
+                                <td className='border border-gray-300 px-2 sm:px-4 py-2 text-right text-xs sm:text-sm'>
+                                  {submission.financial_projections.multi_story_scenarios.scenarios[
                                     '3_story'
-                                  ].irr_percent.toFixed(1)}%`
-                                : 'N/A'}
-                            </td>
-                            <td className='border border-gray-300 px-4 py-2 text-right'>
-                              {submission.financial_projections
-                                .multi_story_scenarios.scenarios['3_story']
-                                .noi_formatted || 'N/A'}
-                            </td>
-                            <td className='border border-gray-300 px-4 py-2 text-right'>
-                              {submission.financial_projections
-                                .multi_story_scenarios.scenarios['3_story']
-                                .total_development_cost_formatted || 'N/A'}
-                            </td>
-                            <td className='border border-gray-300 px-4 py-2 text-right text-blue-600 font-semibold'>
-                              {submission.financial_projections
-                                .multi_story_scenarios.scenarios['3_story']
-                                .equity_required_formatted || 'N/A'}
-                            </td>
-                            <td className='border border-gray-300 px-4 py-2 text-right'>
-                              {submission.financial_projections
-                                .multi_story_scenarios.scenarios['3_story']
-                                .debt_financing_formatted || 'N/A'}
-                            </td>
-                          </tr>
-                        )}
-                        {submission.financial_projections.multi_story_scenarios
-                          .scenarios?.['4_story'] && (
-                          <tr
-                            className={
-                              submission.financial_projections
-                                .multi_story_scenarios.recommended === '4_story'
-                                ? 'bg-green-50 hover:bg-green-100'
-                                : 'bg-white hover:bg-gray-50'
-                            }
-                          >
-                            <td className='border border-gray-300 px-4 py-2 font-medium'>
-                              4-Story
-                              {submission.financial_projections
-                                .multi_story_scenarios.recommended ===
-                                '4_story' && (
-                                <Badge className='ml-2 bg-green-600'>
-                                  Recommended
-                                </Badge>
-                              )}
-                            </td>
-                            <td className='border border-gray-300 px-4 py-2 text-right'>
-                              {submission.financial_projections.multi_story_scenarios.scenarios[
-                                '4_story'
-                              ].units.toLocaleString()}
-                            </td>
-                            <td className='border border-gray-300 px-4 py-2 text-right font-semibold text-green-600'>
-                              {submission.financial_projections
-                                .multi_story_scenarios.scenarios['4_story']
-                                .irr_percent
-                                ? `${submission.financial_projections.multi_story_scenarios.scenarios[
+                                  ].units.toLocaleString()}
+                                </td>
+                                <td className='border border-gray-300 px-2 sm:px-4 py-2 text-right font-semibold text-green-600 text-xs sm:text-sm'>
+                                  {submission.financial_projections
+                                    .multi_story_scenarios.scenarios['3_story']
+                                    .irr_percent
+                                    ? `${submission.financial_projections.multi_story_scenarios.scenarios[
+                                        '3_story'
+                                      ].irr_percent.toFixed(1)}%`
+                                    : 'N/A'}
+                                </td>
+                                <td className='border border-gray-300 px-2 sm:px-4 py-2 text-right text-xs sm:text-sm'>
+                                  {submission.financial_projections
+                                    .multi_story_scenarios.scenarios['3_story']
+                                    .noi_formatted || 'N/A'}
+                                </td>
+                                <td className='border border-gray-300 px-2 sm:px-4 py-2 text-right text-xs sm:text-sm'>
+                                  {submission.financial_projections
+                                    .multi_story_scenarios.scenarios['3_story']
+                                    .total_development_cost_formatted || 'N/A'}
+                                </td>
+                                <td className='border border-gray-300 px-2 sm:px-4 py-2 text-right text-blue-600 font-semibold text-xs sm:text-sm'>
+                                  {submission.financial_projections
+                                    .multi_story_scenarios.scenarios['3_story']
+                                    .equity_required_formatted || 'N/A'}
+                                </td>
+                                <td className='border border-gray-300 px-2 sm:px-4 py-2 text-right text-xs sm:text-sm'>
+                                  {submission.financial_projections
+                                    .multi_story_scenarios.scenarios['3_story']
+                                    .debt_financing_formatted || 'N/A'}
+                                </td>
+                              </tr>
+                            )}
+                            {submission.financial_projections
+                              .multi_story_scenarios.scenarios?.['4_story'] && (
+                              <tr
+                                className={
+                                  submission.financial_projections
+                                    .multi_story_scenarios.recommended ===
+                                  '4_story'
+                                    ? 'bg-green-50 hover:bg-green-100'
+                                    : 'bg-white hover:bg-gray-50'
+                                }
+                              >
+                                <td className='border border-gray-300 px-2 sm:px-4 py-2 font-medium text-xs sm:text-sm'>
+                                  4-Story
+                                  {submission.financial_projections
+                                    .multi_story_scenarios.recommended ===
+                                    '4_story' && (
+                                    <Badge className='ml-1 sm:ml-2 bg-green-600 text-[10px] sm:text-xs'>
+                                      Recommended
+                                    </Badge>
+                                  )}
+                                </td>
+                                <td className='border border-gray-300 px-2 sm:px-4 py-2 text-right text-xs sm:text-sm'>
+                                  {submission.financial_projections.multi_story_scenarios.scenarios[
                                     '4_story'
-                                  ].irr_percent.toFixed(1)}%`
-                                : 'N/A'}
-                            </td>
-                            <td className='border border-gray-300 px-4 py-2 text-right'>
-                              {submission.financial_projections
-                                .multi_story_scenarios.scenarios['4_story']
-                                .noi_formatted || 'N/A'}
-                            </td>
-                            <td className='border border-gray-300 px-4 py-2 text-right'>
-                              {submission.financial_projections
-                                .multi_story_scenarios.scenarios['4_story']
-                                .total_development_cost_formatted || 'N/A'}
-                            </td>
-                            <td className='border border-gray-300 px-4 py-2 text-right text-blue-600 font-semibold'>
-                              {submission.financial_projections
-                                .multi_story_scenarios.scenarios['4_story']
-                                .equity_required_formatted || 'N/A'}
-                            </td>
-                            <td className='border border-gray-300 px-4 py-2 text-right'>
-                              {submission.financial_projections
-                                .multi_story_scenarios.scenarios['4_story']
-                                .debt_financing_formatted || 'N/A'}
-                            </td>
-                          </tr>
-                        )}
-                        {submission.financial_projections.multi_story_scenarios
-                          .scenarios?.['5_story'] && (
-                          <tr
-                            className={
-                              submission.financial_projections
-                                .multi_story_scenarios.recommended === '5_story'
-                                ? 'bg-green-50 hover:bg-green-100'
-                                : 'bg-white hover:bg-gray-50'
-                            }
-                          >
-                            <td className='border border-gray-300 px-4 py-2 font-medium'>
-                              5-Story
-                              {submission.financial_projections
-                                .multi_story_scenarios.recommended ===
-                                '5_story' && (
-                                <Badge className='ml-2 bg-green-600'>
-                                  Recommended
-                                </Badge>
-                              )}
-                            </td>
-                            <td className='border border-gray-300 px-4 py-2 text-right'>
-                              {submission.financial_projections.multi_story_scenarios.scenarios[
-                                '5_story'
-                              ].units.toLocaleString()}
-                            </td>
-                            <td className='border border-gray-300 px-4 py-2 text-right font-semibold text-green-600'>
-                              {submission.financial_projections
-                                .multi_story_scenarios.scenarios['5_story']
-                                .irr_percent
-                                ? `${submission.financial_projections.multi_story_scenarios.scenarios[
+                                  ].units.toLocaleString()}
+                                </td>
+                                <td className='border border-gray-300 px-2 sm:px-4 py-2 text-right font-semibold text-green-600 text-xs sm:text-sm'>
+                                  {submission.financial_projections
+                                    .multi_story_scenarios.scenarios['4_story']
+                                    .irr_percent
+                                    ? `${submission.financial_projections.multi_story_scenarios.scenarios[
+                                        '4_story'
+                                      ].irr_percent.toFixed(1)}%`
+                                    : 'N/A'}
+                                </td>
+                                <td className='border border-gray-300 px-2 sm:px-4 py-2 text-right text-xs sm:text-sm'>
+                                  {submission.financial_projections
+                                    .multi_story_scenarios.scenarios['4_story']
+                                    .noi_formatted || 'N/A'}
+                                </td>
+                                <td className='border border-gray-300 px-2 sm:px-4 py-2 text-right text-xs sm:text-sm'>
+                                  {submission.financial_projections
+                                    .multi_story_scenarios.scenarios['4_story']
+                                    .total_development_cost_formatted || 'N/A'}
+                                </td>
+                                <td className='border border-gray-300 px-2 sm:px-4 py-2 text-right text-blue-600 font-semibold text-xs sm:text-sm'>
+                                  {submission.financial_projections
+                                    .multi_story_scenarios.scenarios['4_story']
+                                    .equity_required_formatted || 'N/A'}
+                                </td>
+                                <td className='border border-gray-300 px-2 sm:px-4 py-2 text-right text-xs sm:text-sm'>
+                                  {submission.financial_projections
+                                    .multi_story_scenarios.scenarios['4_story']
+                                    .debt_financing_formatted || 'N/A'}
+                                </td>
+                              </tr>
+                            )}
+                            {submission.financial_projections
+                              .multi_story_scenarios.scenarios?.['5_story'] && (
+                              <tr
+                                className={
+                                  submission.financial_projections
+                                    .multi_story_scenarios.recommended ===
+                                  '5_story'
+                                    ? 'bg-green-50 hover:bg-green-100'
+                                    : 'bg-white hover:bg-gray-50'
+                                }
+                              >
+                                <td className='border border-gray-300 px-2 sm:px-4 py-2 font-medium text-xs sm:text-sm'>
+                                  5-Story
+                                  {submission.financial_projections
+                                    .multi_story_scenarios.recommended ===
+                                    '5_story' && (
+                                    <Badge className='ml-1 sm:ml-2 bg-green-600 text-[10px] sm:text-xs'>
+                                      Recommended
+                                    </Badge>
+                                  )}
+                                </td>
+                                <td className='border border-gray-300 px-2 sm:px-4 py-2 text-right text-xs sm:text-sm'>
+                                  {submission.financial_projections.multi_story_scenarios.scenarios[
                                     '5_story'
-                                  ].irr_percent.toFixed(1)}%`
-                                : 'N/A'}
-                            </td>
-                            <td className='border border-gray-300 px-4 py-2 text-right'>
-                              {submission.financial_projections
-                                .multi_story_scenarios.scenarios['5_story']
-                                .noi_formatted || 'N/A'}
-                            </td>
-                            <td className='border border-gray-300 px-4 py-2 text-right'>
-                              {submission.financial_projections
-                                .multi_story_scenarios.scenarios['5_story']
-                                .total_development_cost_formatted || 'N/A'}
-                            </td>
-                            <td className='border border-gray-300 px-4 py-2 text-right text-blue-600 font-semibold'>
-                              {submission.financial_projections
-                                .multi_story_scenarios.scenarios['5_story']
-                                .equity_required_formatted || 'N/A'}
-                            </td>
-                            <td className='border border-gray-300 px-4 py-2 text-right'>
-                              {submission.financial_projections
-                                .multi_story_scenarios.scenarios['5_story']
-                                .debt_financing_formatted || 'N/A'}
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
+                                  ].units.toLocaleString()}
+                                </td>
+                                <td className='border border-gray-300 px-2 sm:px-4 py-2 text-right font-semibold text-green-600 text-xs sm:text-sm'>
+                                  {submission.financial_projections
+                                    .multi_story_scenarios.scenarios['5_story']
+                                    .irr_percent
+                                    ? `${submission.financial_projections.multi_story_scenarios.scenarios[
+                                        '5_story'
+                                      ].irr_percent.toFixed(1)}%`
+                                    : 'N/A'}
+                                </td>
+                                <td className='border border-gray-300 px-2 sm:px-4 py-2 text-right text-xs sm:text-sm'>
+                                  {submission.financial_projections
+                                    .multi_story_scenarios.scenarios['5_story']
+                                    .noi_formatted || 'N/A'}
+                                </td>
+                                <td className='border border-gray-300 px-2 sm:px-4 py-2 text-right text-xs sm:text-sm'>
+                                  {submission.financial_projections
+                                    .multi_story_scenarios.scenarios['5_story']
+                                    .total_development_cost_formatted || 'N/A'}
+                                </td>
+                                <td className='border border-gray-300 px-2 sm:px-4 py-2 text-right text-blue-600 font-semibold text-xs sm:text-sm'>
+                                  {submission.financial_projections
+                                    .multi_story_scenarios.scenarios['5_story']
+                                    .equity_required_formatted || 'N/A'}
+                                </td>
+                                <td className='border border-gray-300 px-2 sm:px-4 py-2 text-right text-xs sm:text-sm'>
+                                  {submission.financial_projections
+                                    .multi_story_scenarios.scenarios['5_story']
+                                    .debt_financing_formatted || 'N/A'}
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
                   </div>
 
                   {submission.financial_projections.multi_story_scenarios
                     .recommended_reason && (
-                    <div className='mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200'>
-                      <p className='text-sm font-semibold text-blue-800'>
+                    <div className='mt-4 p-3 sm:p-4 bg-blue-50 rounded-lg border border-blue-200'>
+                      <p className='text-xs sm:text-sm font-semibold text-blue-800'>
                         <strong>Recommended:</strong>{' '}
                         {submission.financial_projections.multi_story_scenarios.recommended
                           ?.replace('_', ' ')
                           .replace(/\b\w/g, (l: string) => l.toUpperCase())}
                       </p>
-                      <p className='text-sm text-blue-700 mt-1'>
+                      <p className='text-xs sm:text-sm text-blue-700 mt-1'>
                         {
                           submission.financial_projections.multi_story_scenarios
                             .recommended_reason
@@ -862,38 +877,42 @@ export default function AssessmentVisualizationPage({
             {/* Development Costs */}
             {submission.financial_projections.total_development_cost && (
               <div>
-                <h4 className='font-semibold mb-3 text-blue-700 font-[family-name:var(--font-safe-light-accent)]'>
+                <h4 className='font-semibold mb-2 sm:mb-3 text-sm sm:text-base text-blue-700 font-[family-name:var(--font-safe-light-accent)]'>
                   Development Cost Breakdown
                 </h4>
-                <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'>
+                <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4'>
                   <div className='bg-gray-50 rounded-lg p-3'>
-                    <p className='text-sm text-gray-600'>
+                    <p className='text-xs sm:text-sm text-gray-600'>
                       Total Development Cost
                     </p>
-                    <p className='text-xl font-bold text-blue-600'>
+                    <p className='text-lg sm:text-xl font-bold text-blue-600'>
                       $
                       {submission.financial_projections.total_development_cost.toLocaleString()}
                     </p>
                   </div>
                   <div className='bg-gray-50 rounded-lg p-3'>
-                    <p className='text-sm text-gray-600'>Cost Per Unit</p>
-                    <p className='text-xl font-bold text-blue-600'>
+                    <p className='text-xs sm:text-sm text-gray-600'>
+                      Cost Per Unit
+                    </p>
+                    <p className='text-lg sm:text-xl font-bold text-blue-600'>
                       $
                       {submission.financial_projections.adjusted_cost_per_unit?.toLocaleString() ||
                         'N/A'}
                     </p>
-                    <p className='text-xs text-gray-500 mt-1'>
+                    <p className='text-[10px] sm:text-xs text-gray-500 mt-1'>
                       Target: ≤$325,000/unit
                     </p>
                   </div>
                   <div className='bg-gray-50 rounded-lg p-3'>
-                    <p className='text-sm text-gray-600'>Land Acquisition</p>
-                    <p className='text-lg font-semibold'>
+                    <p className='text-xs sm:text-sm text-gray-600'>
+                      Land Acquisition
+                    </p>
+                    <p className='text-base sm:text-lg font-semibold'>
                       $
                       {submission.financial_projections.land_acquisition_cost?.toLocaleString() ||
                         '0'}
                     </p>
-                    <p className='text-xs text-gray-500 mt-1'>
+                    <p className='text-[10px] sm:text-xs text-gray-500 mt-1'>
                       Church contribution
                     </p>
                   </div>
@@ -904,43 +923,49 @@ export default function AssessmentVisualizationPage({
             {/* Revenue Projections - Simplified */}
             {submission.financial_projections.revenue_projections && (
               <div>
-                <h4 className='font-semibold mb-3 text-green-700 font-[family-name:var(--font-safe-light-accent)]'>
+                <h4 className='font-semibold mb-2 sm:mb-3 text-sm sm:text-base text-green-700 font-[family-name:var(--font-safe-light-accent)]'>
                   Revenue & Operating Performance
                 </h4>
-                <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4'>
+                <div className='grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4'>
                   <div className='bg-green-50 rounded-lg p-3'>
-                    <p className='text-sm text-gray-600'>Annual Revenue</p>
-                    <p className='text-xl font-bold text-green-600'>
+                    <p className='text-xs sm:text-sm text-gray-600'>
+                      Annual Revenue
+                    </p>
+                    <p className='text-base sm:text-lg md:text-xl font-bold text-green-600'>
                       $
                       {submission.financial_projections.revenue_projections.total_annual_revenue?.toLocaleString() ||
                         'N/A'}
                     </p>
                   </div>
                   <div className='bg-yellow-50 rounded-lg p-3'>
-                    <p className='text-sm text-gray-600'>Operating Expenses</p>
-                    <p className='text-xl font-bold text-yellow-600'>
+                    <p className='text-xs sm:text-sm text-gray-600'>
+                      Operating Expenses
+                    </p>
+                    <p className='text-base sm:text-lg md:text-xl font-bold text-yellow-600'>
                       $
                       {submission.financial_projections.revenue_projections.operating_expenses?.toLocaleString() ||
                         'N/A'}
                     </p>
-                    <p className='text-xs text-gray-500 mt-1'>
+                    <p className='text-[10px] sm:text-xs text-gray-500 mt-1'>
                       {submission.financial_projections.revenue_projections
                         .operating_expense_ratio || '42%'}
                     </p>
                   </div>
                   <div className='bg-blue-50 rounded-lg p-3'>
-                    <p className='text-sm text-gray-600'>
+                    <p className='text-xs sm:text-sm text-gray-600'>
                       Net Operating Income
                     </p>
-                    <p className='text-xl font-bold text-blue-600'>
+                    <p className='text-base sm:text-lg md:text-xl font-bold text-blue-600'>
                       $
                       {submission.financial_projections.revenue_projections.net_operating_income?.toLocaleString() ||
                         'N/A'}
                     </p>
                   </div>
                   <div className='bg-purple-50 rounded-lg p-3'>
-                    <p className='text-sm text-gray-600'>Yield on Cost</p>
-                    <p className='text-xl font-bold text-purple-600'>
+                    <p className='text-xs sm:text-sm text-gray-600'>
+                      Yield on Cost
+                    </p>
+                    <p className='text-base sm:text-lg md:text-xl font-bold text-purple-600'>
                       {submission.financial_projections.revenue_projections
                         .yield_on_cost ||
                       submission.financial_projections.revenue_projections
@@ -987,27 +1012,17 @@ export default function AssessmentVisualizationPage({
       {/* Multi-Story Development Scenarios */}
 
       {/* Executive Summary */}
-      <Card className='mb-6 bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200'>
-        <CardHeader>
-          <CardTitle className='text-2xl flex items-center gap-2 font-[family-name:var(--font-safe-light-accent)]'>
+      <Card className='mb-4 sm:mb-6 bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200'>
+        <CardHeader className='p-3 sm:p-4 md:p-6 pb-0'>
+          <CardTitle className='text-lg sm:text-xl md:text-2xl flex items-center gap-2 font-[family-name:var(--font-safe-light-accent)]'>
             Executive Summary
           </CardTitle>
         </CardHeader>
-        <CardContent className='space-y-4'>
+        <CardContent className='space-y-3 sm:space-y-4 -mt-8 px-3 sm:px-4 md:px-6 pb-3 sm:pb-4 md:pb-6'>
           <div>
             <h3 className='font-semibold text-lg mb-2 font-[family-name:var(--font-safe-light-accent)]'>
               Overall Assessment
             </h3>
-            {/* <p className='text-gray-700'>
-              This property has been evaluated across five key dimensions:
-              Financial Viability (30%), Market Demand (25%), Location Quality
-              (20%), Partnership Alignment (15%), and Risk Assessment (10%). The
-              weighted composite score is{' '}
-              <strong>
-                {score.toFixed(1)}/100 (Grade {grade})
-              </strong>
-              .
-            </p> */}
           </div>
 
           {/* Property Summary with Demolish Info */}
@@ -1490,17 +1505,17 @@ export default function AssessmentVisualizationPage({
           propertyInfo?.demolish_all_structures;
 
         return (
-          <Card className='mb-6 border-2 border-gray-300'>
-            <CardHeader className='bg-gray-50 py-2 pb-2'>
-              <CardTitle className='text-base flex items-center gap-2 font-[family-name:var(--font-safe-light-accent)]'>
+          <Card className='mb-4 sm:mb-6 border-2 border-gray-300'>
+            <CardHeader className='bg-gray-50 py-2 pb-2 px-3 sm:px-4 md:px-6'>
+              <CardTitle className='text-sm sm:text-base flex items-center gap-2 font-[family-name:var(--font-safe-light-accent)]'>
                 <MapPin className='h-4 w-4 text-blue-600' />
                 Property Overview
               </CardTitle>
             </CardHeader>
-            <CardContent className='pt-2 pb-3'>
+            <CardContent className='pt-2 pb-3 px-3 sm:px-4 md:px-6'>
               {/* Primary Address */}
               <div className='mb-4 pb-4 border-b border-gray-200'>
-                <div className='grid grid-cols-1 md:grid-cols-5 gap-3'>
+                <div className='grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 sm:gap-3'>
                   <div>
                     <label className='text-xs font-semibold text-gray-500 uppercase block mb-0.5'>
                       Street Address

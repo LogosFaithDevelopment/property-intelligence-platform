@@ -158,6 +158,22 @@ class ReportGeneratorV2:
             'alignment': TA_CENTER,
             'leading': 18
         })
+    
+    def _add_watermark(self, canvas_obj, doc):
+        """Add CONFIDENTIAL watermark to first page"""
+        canvas_obj.saveState()
+        canvas_obj.setFillColor(colors.red)
+        canvas_obj.setFont('Helvetica-Bold', 60)
+        canvas_obj.setFillAlpha(0.2)  # 20% opacity
+        # Center the watermark diagonally
+        canvas_obj.translate(letter[0]/2, letter[1]/2)
+        canvas_obj.rotate(45)
+        canvas_obj.drawCentredString(0, 0, 'CONFIDENTIAL')
+        canvas_obj.restoreState()
+    
+    def _add_page_number(self, canvas_obj, doc):
+        """Add page numbers to pages 2 and 3 (no watermark)"""
+        pass  # Just a placeholder, no watermark on later pages
 
     async def generate_assessment_report(
         self,
@@ -186,6 +202,9 @@ class ReportGeneratorV2:
         # The assessment object already has all the fields we need as direct attributes
         # No need to parse JSON - all data is on the assessment model itself
         
+        # Track current page number for watermark
+        self.current_page = 0
+        
         # Create PDF document
         doc = SimpleDocTemplate(
             self.buffer,
@@ -212,8 +231,8 @@ class ReportGeneratorV2:
         # PAGE 3: Development Analysis & Financial Projections
         story.extend(self._create_development_analysis(assessment))
         
-        # Build PDF
-        doc.build(story)
+        # Build PDF with watermark on first page
+        doc.build(story, onFirstPage=self._add_watermark, onLaterPages=self._add_page_number)
         
         # Get PDF bytes
         pdf_bytes = self.buffer.getvalue()
@@ -678,7 +697,94 @@ class ReportGeneratorV2:
         
         content.append(Spacer(1, 0.05*inch))
         
-        # 2. Ownership & Financial Details
+        # 2. Available Build Space - LOGOS Qualification
+        content.append(Paragraph("Available Build Space - LOGOS Qualification", self.styles['SubsectionHeader']))
+        
+        # Calculate available build space
+        available_build_sqft = assessment.available_build_sqft or 0
+        combined_lot_size = property_obj.lot_size_sqft or 0
+        
+        # Add lot sizes from additional parcels
+        if isinstance(additional_addresses, list):
+            for addr in additional_addresses:
+                if isinstance(addr, dict) and addr.get('lot_size_sqft'):
+                    combined_lot_size += addr['lot_size_sqft']
+        
+        # If user provided custom available space, use it; otherwise calculate
+        if available_build_sqft > 0:
+            available_space = available_build_sqft
+        else:
+            # Calculate based on lot size minus building size
+            building_size = property_obj.building_sqft or 0
+            available_space = combined_lot_size - building_size if not property_obj.demolish_all_structures else combined_lot_size
+        
+        available_acres = available_space / 43560 if available_space > 0 else 0
+        qualifies_for_logos = available_space >= 5000
+        
+        # Create qualification box
+        qual_style = ParagraphStyle(
+            'QualificationBox',
+            parent=self.styles['Normal'],
+            fontSize=12,
+            alignment=TA_CENTER,
+            fontName='Helvetica-Bold',
+            textColor=colors.green if qualifies_for_logos else colors.red
+        )
+        
+        qual_data = []
+        if qualifies_for_logos:
+            qual_data.append([Paragraph("✓ QUALIFIES FOR LOGOS", qual_style)])
+            qual_data.append([Paragraph(f"{available_space:,} sqft available (Min: 5,000 sqft)", table_cell_style)])
+        else:
+            qual_data.append([Paragraph("✗ DOES NOT QUALIFY", qual_style)])
+            qual_data.append([Paragraph(f"{available_space:,} sqft available (Min: 5,000 sqft required)", table_cell_style)])
+        
+        qual_table = Table(qual_data, colWidths=[6.5*inch])
+        qual_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), colors.lightgreen if qualifies_for_logos else colors.mistyrose),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('BOX', (0, 0), (-1, -1), 2, colors.green if qualifies_for_logos else colors.red),
+            ('LEFTPADDING', (0, 0), (-1, -1), 12),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 12),
+            ('TOPPADDING', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+        ]))
+        content.append(qual_table)
+        content.append(Spacer(1, 0.1*inch))
+        
+        # Add breakdown details
+        space_data = []
+        space_data.append([Paragraph('<b>Total Lot Size</b>', table_cell_style), 
+                          Paragraph(f"{combined_lot_size:,} sqft ({combined_lot_size/43560:.2f} acres)", table_cell_style)])
+        if property_obj.demolish_all_structures:
+            space_data.append([Paragraph('<b>Development Plan</b>', table_cell_style), 
+                              Paragraph("Full Demolition - All land available", table_cell_style)])
+        else:
+            space_data.append([Paragraph('<b>Existing Buildings</b>', table_cell_style), 
+                              Paragraph(f"{property_obj.building_sqft:,} sqft" if property_obj.building_sqft else "N/A", table_cell_style)])
+        space_data.append([Paragraph('<b>Available Space</b>', table_cell_style), 
+                          Paragraph(f"{available_space:,} sqft ({available_acres:.2f} acres)", table_cell_style)])
+        
+        space_table = Table(space_data, colWidths=[2*inch, 4.5*inch])
+        space_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (0, -1), self.bg_gray),
+            ('TEXTCOLOR', (0, 0), (-1, -1), self.dark_gray),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('GRID', (0, 0), (-1, -1), 0.5, self.light_gray),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        content.append(space_table)
+        content.append(Spacer(1, 0.2*inch))
+        
+        # 3. Ownership & Financial Details
         content.append(Paragraph("Ownership & Financial Details", self.styles['SubsectionHeader']))
         
         owns_free = assessment.owns_property_free_clear or False
@@ -724,6 +830,54 @@ class ReportGeneratorV2:
         content.append(ownership_table)
         content.append(Spacer(1, 0.2*inch))
         
+        # 3.5. Property Needs & Financing (NEW SECTION)
+        property_improvement_needs = self._parse_json_field(assessment.property_improvement_needs)
+        capital_financing_need = assessment.capital_financing_need
+        
+        if property_improvement_needs or capital_financing_need:
+            content.append(Paragraph("Property Needs & Financing", self.styles['SubsectionHeader']))
+            
+            needs_data = []
+            
+            if property_improvement_needs and isinstance(property_improvement_needs, list) and len(property_improvement_needs) > 0:
+                # Map improvement codes to readable labels
+                improvement_labels = {
+                    'hvac': 'HVAC/AC System',
+                    'roof': 'Roof',
+                    'landscaping': 'Landscaping',
+                    'painting': 'Painting',
+                    'interior': 'Interior Improvements',
+                    'other': 'Other'
+                }
+                improvements = [improvement_labels.get(need, need) for need in property_improvement_needs]
+                improvements_text = ', '.join(improvements)
+                needs_data.append([Paragraph('<b>Property Improvements Needed</b>', table_cell_style), 
+                                  Paragraph(improvements_text, table_cell_style)])
+            
+            if capital_financing_need:
+                needs_data.append([Paragraph('<b>Capital/Financing Need</b>', table_cell_style), 
+                                  Paragraph(capital_financing_need, table_cell_style)])
+            
+            if needs_data:
+                needs_table = Table(needs_data, colWidths=[2*inch, 4.5*inch])
+                needs_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (0, -1), self.bg_gray),
+                    ('TEXTCOLOR', (0, 0), (-1, -1), self.dark_gray),
+                    ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                    ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                    ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 9),
+                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                    ('GRID', (0, 0), (-1, -1), 0.5, self.light_gray),
+                    ('ROWBACKGROUNDS', (0, 0), (-1, -1), [colors.white, self.bg_gray]),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 8),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+                    ('TOPPADDING', (0, 0), (-1, -1), 6),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ]))
+                content.append(needs_table)
+                content.append(Spacer(1, 0.2*inch))
+        
         # 3. Development Preferences
         content.append(Paragraph("Development Preferences & Requirements", self.styles['SubsectionHeader']))
         
@@ -763,6 +917,90 @@ class ReportGeneratorV2:
             ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
         ]))
         content.append(preferences_table)
+        content.append(Spacer(1, 0.2*inch))
+        
+        # 5. Financial Overview (if we have financial projections)
+        financial_projections = self._parse_json_field(assessment.financial_projections)
+        if financial_projections and isinstance(financial_projections, dict):
+            multi_story_data = financial_projections.get('multi_story_scenarios', {})
+            if isinstance(multi_story_data, dict):
+                scenarios = multi_story_data.get('scenarios', {})
+                recommended = multi_story_data.get('recommended', '4_story')
+                
+                # Get the recommended scenario
+                rec_scenario = scenarios.get(recommended, {})
+                if rec_scenario and isinstance(rec_scenario, dict):
+                    content.append(Paragraph("Financial Overview - Recommended Scenario", self.styles['SubsectionHeader']))
+                    
+                    # Create highlight box
+                    highlight_style = ParagraphStyle(
+                        'HighlightBox',
+                        parent=self.styles['Normal'],
+                        fontSize=10,
+                        textColor=self.dark_gray,
+                        alignment=TA_CENTER,
+                        fontName='Helvetica-Bold'
+                    )
+                    
+                    # Extract key metrics
+                    story_name = recommended.replace('_', '-').title()
+                    units = rec_scenario.get('units', 0)
+                    irr = rec_scenario.get('irr_percent', 0)
+                    equity = rec_scenario.get('equity_required', 0)
+                    debt = rec_scenario.get('debt_financing', 0)
+                    noi_year1 = rec_scenario.get('noi_year_1', 0)
+                    total_cost = rec_scenario.get('total_development_cost', 0)
+                    
+                    # Create financial highlights table
+                    highlights_data = []
+                    highlights_data.append([Paragraph(f"<b>Recommended Development:</b> {story_name} ({units} units)", table_cell_style)])
+                    highlights_data.append([Paragraph(f"<b>Target IRR:</b> {irr:.1f}% {'✓ MEETS 20% TARGET' if irr >= 20 else '✗ Below 20% target'}", table_cell_style)])
+                    
+                    highlights_table = Table(highlights_data, colWidths=[6.5*inch])
+                    highlights_table.setStyle(TableStyle([
+                        ('BACKGROUND', (0, 0), (-1, -1), colors.lightblue),
+                        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                        ('BOX', (0, 0), (-1, -1), 1.5, self.gold_start),
+                        ('LEFTPADDING', (0, 0), (-1, -1), 12),
+                        ('RIGHTPADDING', (0, 0), (-1, -1), 12),
+                        ('TOPPADDING', (0, 0), (-1, -1), 8),
+                        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                    ]))
+                    content.append(highlights_table)
+                    content.append(Spacer(1, 0.1*inch))
+                    
+                    # Key metrics in two columns
+                    metrics_data = [
+                        [Paragraph('<b>Equity Required (20%)</b>', table_cell_style), 
+                         Paragraph(f"${equity:,}", table_cell_style),
+                         Paragraph('<b>Permanent Loan (65% LTV)</b>', table_cell_style),
+                         Paragraph(f"${int(debt * 0.65):,}", table_cell_style)],
+                        [Paragraph('<b>Total Development Cost</b>', table_cell_style),
+                         Paragraph(f"${total_cost:,}", table_cell_style),
+                         Paragraph('<b>First Year NOI</b>', table_cell_style),
+                         Paragraph(f"${noi_year1:,}" if noi_year1 else "N/A", table_cell_style)],
+                    ]
+                    
+                    metrics_table = Table(metrics_data, colWidths=[1.625*inch, 1.625*inch, 1.625*inch, 1.625*inch])
+                    metrics_table.setStyle(TableStyle([
+                        ('BACKGROUND', (0, 0), (0, -1), self.bg_gray),
+                        ('BACKGROUND', (2, 0), (2, -1), self.bg_gray),
+                        ('TEXTCOLOR', (0, 0), (-1, -1), self.dark_gray),
+                        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                        ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
+                        ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
+                        ('FONTNAME', (3, 0), (3, -1), 'Helvetica'),
+                        ('FONTSIZE', (0, 0), (-1, -1), 9),
+                        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                        ('GRID', (0, 0), (-1, -1), 0.5, self.light_gray),
+                        ('LEFTPADDING', (0, 0), (-1, -1), 8),
+                        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+                        ('TOPPADDING', (0, 0), (-1, -1), 6),
+                        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                    ]))
+                    content.append(metrics_table)
         
         return content
 
@@ -973,6 +1211,56 @@ class ReportGeneratorV2:
                     ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
                 ]))
                 content.append(structure_table)
+                content.append(Spacer(1, 0.2*inch))
+                
+                # 5. Revenue & Operating Performance
+                revenue_projections = financial_projections.get('revenue_projections', {})
+                if revenue_projections and isinstance(revenue_projections, dict):
+                    content.append(Paragraph("Revenue & Operating Performance", self.styles['SubsectionHeader']))
+                    
+                    # Extract revenue metrics
+                    annual_revenue = revenue_projections.get('total_annual_revenue', 0)
+                    operating_expenses = revenue_projections.get('operating_expenses', 0)
+                    noi = revenue_projections.get('net_operating_income', 0)
+                    expense_ratio = revenue_projections.get('operating_expense_ratio', '42%')
+                    yield_on_cost = revenue_projections.get('yield_on_cost') or revenue_projections.get('cap_rate', 0)
+                    
+                    revenue_data = [
+                        [Paragraph('<b>Annual Revenue</b>', table_cell_style), 
+                         Paragraph(f"${annual_revenue:,}" if annual_revenue else "N/A", table_cell_style)],
+                        [Paragraph('<b>Operating Expenses</b>', table_cell_style), 
+                         Paragraph(f"${operating_expenses:,} ({expense_ratio})" if operating_expenses else "N/A", table_cell_style)],
+                        [Paragraph('<b>Net Operating Income (NOI)</b>', table_cell_style), 
+                         Paragraph(f"${noi:,}" if noi else "N/A", table_cell_style)],
+                        [Paragraph('<b>Yield on Cost</b>', table_cell_style), 
+                         Paragraph(f"{yield_on_cost:.2f}% (Target: 7%)" if yield_on_cost else "N/A", table_cell_style)],
+                    ]
+                    
+                    revenue_table = Table(revenue_data, colWidths=[3*inch, 3.5*inch])
+                    revenue_table.setStyle(TableStyle([
+                        ('BACKGROUND', (0, 0), (0, -1), self.bg_gray),
+                        ('TEXTCOLOR', (0, 0), (-1, -1), self.dark_gray),
+                        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+                        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+                        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                        ('FONTSIZE', (0, 0), (-1, -1), 9),
+                        ('GRID', (0, 0), (-1, -1), 0.5, self.light_gray),
+                        ('ROWBACKGROUNDS', (0, 0), (-1, -1), [colors.white, self.bg_gray]),
+                        ('LEFTPADDING', (0, 0), (-1, -1), 8),
+                        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+                        ('TOPPADDING', (0, 0), (-1, -1), 6),
+                        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                    ]))
+                    content.append(revenue_table)
+                    
+                    # Add assumptions if available
+                    assumptions = revenue_projections.get('assumptions', [])
+                    if assumptions and isinstance(assumptions, list):
+                        content.append(Spacer(1, 0.1*inch))
+                        content.append(Paragraph("<b>Key Assumptions:</b>", self.styles['BodyText']))
+                        for assumption in assumptions[:5]:  # Limit to 5 assumptions
+                            content.append(Paragraph(f"• {assumption}", self.styles['BodyText']))
+                
         else:
             # Show basic financial info even without detailed scenarios
             content.append(Paragraph("Financial Analysis", self.styles['SubsectionHeader']))
@@ -1036,6 +1324,94 @@ class ReportGeneratorV2:
                     demand_text.append(f"Rent Growth: {demand['rent_growth']}")
                 if demand_text:
                     content.append(Paragraph(" | ".join(demand_text), self.styles['BodyText']))
+            
+            # AMI Limits
+            ami_limits = market_analysis.get('ami_limits', {})
+            if ami_limits:
+                content.append(Spacer(1, 0.1*inch))
+                content.append(Paragraph("<b>Area Median Income (AMI) Limits:</b>", self.styles['BodyText']))
+                
+                ami_data = []
+                if ami_limits.get('ami_50_percent_2person'):
+                    ami_data.append([Paragraph('<b>50% AMI (2-person)</b>', table_cell_style), 
+                                   Paragraph(f"${ami_limits['ami_50_percent_2person']:,}", table_cell_style)])
+                if ami_limits.get('ami_60_percent_2person'):
+                    ami_data.append([Paragraph('<b>60% AMI (2-person)</b>', table_cell_style), 
+                                   Paragraph(f"${ami_limits['ami_60_percent_2person']:,}", table_cell_style)])
+                if ami_limits.get('ami_80_percent_2person'):
+                    ami_data.append([Paragraph('<b>80% AMI (2-person)</b>', table_cell_style), 
+                                   Paragraph(f"${ami_limits['ami_80_percent_2person']:,}", table_cell_style)])
+                if ami_limits.get('ami_100_percent_2person'):
+                    ami_data.append([Paragraph('<b>100% AMI (2-person)</b>', table_cell_style), 
+                                   Paragraph(f"${ami_limits['ami_100_percent_2person']:,}", table_cell_style)])
+                
+                if ami_data:
+                    ami_table = Table(ami_data, colWidths=[2*inch, 1.5*inch])
+                    ami_table.setStyle(TableStyle([
+                        ('BACKGROUND', (0, 0), (0, -1), self.bg_gray),
+                        ('TEXTCOLOR', (0, 0), (-1, -1), self.dark_gray),
+                        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+                        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+                        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                        ('FONTSIZE', (0, 0), (-1, -1), 8),
+                        ('GRID', (0, 0), (-1, -1), 0.5, self.light_gray),
+                        ('LEFTPADDING', (0, 0), (-1, -1), 6),
+                        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+                        ('TOPPADDING', (0, 0), (-1, -1), 4),
+                        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+                    ]))
+                    content.append(ami_table)
+        
+        # Add Environmental Factors (Flood Risk) if available
+        property_data_sources = self._parse_json_field(assessment.property_obj.data_sources) if hasattr(assessment.property_obj, 'data_sources') else {}
+        smarty_data = property_data_sources.get('smarty_data', {}).get('data', {}) if isinstance(property_data_sources, dict) else {}
+        flood_data = smarty_data.get('flood', {})
+        
+        if flood_data:
+            content.append(Spacer(1, 0.2*inch))
+            content.append(Paragraph("Environmental Factors - Flood Risk", self.styles['SubsectionHeader']))
+            
+            flood_zone = flood_data.get('flood_zone', 'N/A')
+            risk_level = flood_data.get('risk_level', 'N/A')
+            insurance_required = flood_data.get('insurance_required', False)
+            
+            # Determine risk color
+            if risk_level in ['low', 'minimal']:
+                risk_color = colors.green
+                bg_color = colors.lightgreen
+            elif risk_level == 'moderate':
+                risk_color = colors.orange
+                bg_color = colors.lightyellow
+            else:
+                risk_color = colors.red
+                bg_color = colors.mistyrose
+            
+            flood_data_table = [
+                [Paragraph('<b>Flood Zone</b>', table_cell_style), 
+                 Paragraph(f"{flood_zone}", table_cell_style)],
+                [Paragraph('<b>Risk Level</b>', table_cell_style), 
+                 Paragraph(f"{risk_level.title() if risk_level != 'N/A' else 'N/A'}", table_cell_style)],
+                [Paragraph('<b>Insurance Required</b>', table_cell_style), 
+                 Paragraph("Yes" if insurance_required else "No", table_cell_style)],
+            ]
+            
+            flood_table = Table(flood_data_table, colWidths=[2*inch, 2*inch])
+            flood_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (0, -1), self.bg_gray),
+                ('BACKGROUND', (1, 1), (1, 1), bg_color),
+                ('TEXTCOLOR', (0, 0), (-1, -1), self.dark_gray),
+                ('TEXTCOLOR', (1, 1), (1, 1), risk_color),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                ('FONTNAME', (1, 1), (1, 1), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('GRID', (0, 0), (-1, -1), 0.5, self.light_gray),
+                ('LEFTPADDING', (0, 0), (-1, -1), 8),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+                ('TOPPADDING', (0, 0), (-1, -1), 6),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ]))
+            content.append(flood_table)
         
         # Add Risk Factors if available
         risk_factors = self._parse_json_field(assessment.risk_factors)

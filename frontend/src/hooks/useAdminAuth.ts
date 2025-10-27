@@ -39,7 +39,20 @@ async function fetchAdminStatus(
     try {
       console.log('🔍 Checking admin access for:', email);
 
-      const response = await fetch('/api/admin/check', {
+      // Call backend directly instead of through Next.js API route
+      const backendUrl =
+        process.env.NEXT_PUBLIC_API_URL ||
+        (typeof window !== 'undefined'
+          ? 'http://localhost:8000'
+          : 'https://proper-Publi-82PMmiq7gkYF-1157142909.us-east-1.elb.amazonaws.com');
+
+      // Only use HTTPS in production (when API URL is already HTTPS or on production domain)
+      // For local development (localhost), keep HTTP
+      const apiUrl = backendUrl.includes('localhost')
+        ? backendUrl
+        : backendUrl.replace('http://', 'https://');
+
+      const response = await fetch(`${apiUrl}/api/v1/admin/auth/check`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },

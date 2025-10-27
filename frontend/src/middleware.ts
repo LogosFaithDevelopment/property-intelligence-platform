@@ -13,6 +13,7 @@ const isPublicRoute = createRouteMatcher([
   // Note: /submit-property requires authentication to prevent spam/DDOS
   '/submission-success',
   '/submission-status',
+  '/api/health', // Health check endpoint for ELB - must be fast and not require auth
 ]);
 
 /**
@@ -38,8 +39,14 @@ async function checkAdminStatus(token: string): Promise<boolean> {
 }
 
 export default clerkMiddleware(async (auth, request) => {
-  const { userId, getToken } = await auth();
   const pathname = request.nextUrl.pathname;
+
+  // Fast-path for health checks - skip all auth and logic
+  if (pathname === '/api/health') {
+    return NextResponse.next();
+  }
+
+  const { userId, getToken } = await auth();
 
   // Clear admin cache when user signs out
   if (!userId && request.cookies.has('admin_role')) {

@@ -13,7 +13,7 @@ export default function SubmitPropertyPage() {
             Complete this form to partner with Logos on affordable housing
             development.
             <br />
-            We'll review your submission and contact you within 5 business days.
+            We&apos;ll review your submission and contact you within 5 business days.
           </p>
         </div>
 

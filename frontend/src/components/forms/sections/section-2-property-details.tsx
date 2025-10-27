@@ -261,8 +261,8 @@ export function Section2PropertyDetails({
   return (
     <div className='space-y-6'>
       <div>
-        <h2 className='text-2xl font-bold'>Property Details</h2>
-        <p className='text-muted-foreground mt-1'>
+        <h2 className='text-xl md:text-2xl font-bold'>Property Details</h2>
+        <p className='text-sm md:text-base text-muted-foreground mt-1'>
           Information about the property you&apos;re proposing for development
         </p>
       </div>
@@ -283,8 +283,9 @@ export function Section2PropertyDetails({
                 />
               </FormControl>
               <div className='space-y-1 leading-none'>
-                <FormLabel className='text-base font-semibold'>
-                  Are you ok with demolishing all structures at your site?
+                <FormLabel className='text-sm md:text-base font-semibold'>
+                  Are you okay if some or all existing buildings are demolished
+                  to build housing?
                 </FormLabel>
               </div>
             </FormItem>
@@ -653,6 +654,95 @@ export function Section2PropertyDetails({
 
         {/* Coordinates - Will be set by map picker later (no hidden inputs needed) */}
       </div>
+
+      {/* Property Improvement Needs */}
+      <div>
+        <h3 className='text-lg font-semibold mb-4'>
+          Property Improvement Needs
+        </h3>
+
+        <FormField
+          control={form.control}
+          name='property_improvement_needs'
+          render={() => (
+            <FormItem>
+              <FormLabel>Do you have any property improvement needs?</FormLabel>
+              <FormDescription>
+                Select all that apply. These won't affect your assessment score.
+              </FormDescription>
+              <div className='space-y-2 mt-3'>
+                {[
+                  { value: 'hvac', label: 'HVAC/AC System' },
+                  { value: 'roof', label: 'Roof' },
+                  { value: 'landscaping', label: 'Landscaping' },
+                  { value: 'painting', label: 'Painting' },
+                  { value: 'interior', label: 'Interior Improvements' },
+                  { value: 'other', label: 'Other' },
+                ].map((item) => (
+                  <FormField
+                    key={item.value}
+                    control={form.control}
+                    name='property_improvement_needs'
+                    render={({ field }) => {
+                      const currentValue = field.value || [];
+                      return (
+                        <FormItem
+                          key={item.value}
+                          className='flex flex-row items-start space-x-3 space-y-0'
+                        >
+                          <FormControl>
+                            <input
+                              type='checkbox'
+                              checked={currentValue.includes(item.value)}
+                              onChange={(checked) => {
+                                const newValue = checked.target.checked
+                                  ? [...currentValue, item.value]
+                                  : currentValue.filter(
+                                      (value: string) => value !== item.value
+                                    );
+                                field.onChange(newValue);
+                              }}
+                              className='h-4 w-4 rounded border-gray-300'
+                            />
+                          </FormControl>
+                          <FormLabel className='font-normal cursor-pointer'>
+                            {item.label}
+                          </FormLabel>
+                        </FormItem>
+                      );
+                    }}
+                  />
+                ))}
+              </div>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      </div>
+
+      {/* Capital/Financing Need */}
+      <FormField
+        control={form.control}
+        name='capital_financing_need'
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Do you have a capital or financing need?</FormLabel>
+            <FormControl>
+              <Input
+                placeholder='e.g., Need funds for roof repairs'
+                maxLength={100}
+                {...field}
+                value={field.value || ''}
+              />
+            </FormControl>
+            <FormDescription>
+              Optional. Describe any capital or financing needs (max 100
+              characters). This won't affect your assessment score.
+            </FormDescription>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
     </div>
   );
 }

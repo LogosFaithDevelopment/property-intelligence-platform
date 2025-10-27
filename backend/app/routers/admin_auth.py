@@ -143,6 +143,26 @@ async def get_current_admin_info(
     return AdminUserResponse.from_orm(current_user)
 
 
+@router.get("/auth/debug")
+async def debug_clerk_token(
+    request: Request
+):
+    """
+    Debug endpoint to see what Clerk user ID is in the token.
+    """
+    try:
+        clerk_user_id = await get_clerk_user_id_from_request(request)
+        return {
+            "clerk_user_id": clerk_user_id,
+            "message": "Successfully extracted Clerk user ID from token"
+        }
+    except HTTPException as e:
+        return {
+            "error": e.detail,
+            "status_code": e.status_code
+        }
+
+
 @router.get("/auth/check")
 async def check_admin_access(
     current_user: AdminUser = Depends(get_current_admin_user)

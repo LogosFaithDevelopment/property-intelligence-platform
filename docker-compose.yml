@@ -59,7 +59,7 @@ services:
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev # Use development Dockerfile for local dev
     working_dir: /frontend
     ports:
       - '3000:3000'
@@ -68,6 +68,7 @@ services:
       NEXT_PUBLIC_API_URL: http://localhost:8000
       # For server-side (Next.js API routes) calls to backend
       BACKEND_URL: http://backend:8000
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZXhvdGljLW1pbmstNTAuY2xlcmsuYWNjb3VudHMuZGV2JA
       CHOKIDAR_USEPOLLING: 'true'
     volumes:
       - ./frontend:/frontend

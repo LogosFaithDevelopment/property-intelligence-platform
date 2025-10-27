@@ -1557,6 +1557,8 @@ class PropertyEnrichmentService:
             lot_info = smarty_data.get("lot", {})
             building_info = smarty_data.get("building", {})
             multi_address_info = smarty_data.get("multi_address", {})
+            address_info = smarty_data.get("address", {})
+            valuation_info = smarty_data.get("valuation", {})
             
             # Update lot size (always update from Smarty - most accurate)
             if lot_info.get("size_sqft"):
@@ -1564,10 +1566,25 @@ class PropertyEnrichmentService:
                 property_obj.lot_size_acres = lot_info.get("size_acres", lot_info["size_sqft"] / 43560)
                 logger.info(f"Updated lot_size from Smarty: {lot_info['size_sqft']:,} sqft ({property_obj.lot_size_acres:.2f} acres)")
             
-            # Update building size
+            # Update building size and year_built
             if building_info.get("size_sqft"):
                 property_obj.building_sqft = building_info["size_sqft"]
                 logger.info(f"Updated building_sqft from Smarty: {building_info['size_sqft']:,} sqft")
+            
+            if building_info.get("year_built") and not property_obj.year_built:
+                # Convert to int (Smarty returns string)
+                property_obj.year_built = int(building_info["year_built"])
+                logger.info(f"Updated year_built from Smarty: {building_info['year_built']}")
+            
+            # Update county from Smarty address data
+            if address_info.get("county") and not property_obj.county:
+                property_obj.county = address_info["county"]
+                logger.info(f"Updated county from Smarty: {address_info['county']}")
+            
+            # Update assessed value from Smarty valuation
+            if valuation_info.get("assessed_total") and not property_obj.assessed_value:
+                property_obj.assessed_value = valuation_info["assessed_total"]
+                logger.info(f"Updated assessed_value from Smarty: ${valuation_info['assessed_total']:,}")
             
             # Update combined lot/building sizes (for multi-address properties)
             if multi_address_info.get("combined_lot_size_sqft"):

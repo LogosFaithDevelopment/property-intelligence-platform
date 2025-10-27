@@ -81,6 +81,12 @@ class Assessment(BaseModel, UUIDMixin):
     development_involvement_level = Column(String(50), nullable=True)
     special_requirements = Column(Text, nullable=True)
     
+    # Property Improvement Needs
+    property_improvement_needs = Column(JSON, nullable=True)  # Array of: ["hvac", "roof", "landscaping", "painting", "interior", "other"]
+    
+    # Capital/Financing Need
+    capital_financing_need = Column(String(100), nullable=True)  # Free-form text up to 100 characters
+    
     # Phase 2: Deal Breaker Fields (LOGOS Requirements)
     existing_debt_amount = Column(Float, nullable=True)  # Current church debt amount
     debt_to_value_ratio = Column(Float, nullable=True)  # Calculated: debt / assessed_value (deal breaker if >20%)

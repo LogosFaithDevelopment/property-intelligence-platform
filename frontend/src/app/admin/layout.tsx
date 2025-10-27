@@ -12,7 +12,15 @@ import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
-import { LayoutDashboard, FileText, Users, LogOut } from 'lucide-react';
+import {
+  LayoutDashboard,
+  FileText,
+  Users,
+  LogOut,
+  Menu,
+  X,
+} from 'lucide-react';
+import { useState } from 'react';
 
 export default function AdminLayout({
   children,
@@ -24,6 +32,7 @@ export default function AdminLayout({
   const { signOut } = useClerk();
   const router = useRouter();
   const pathname = usePathname();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Show loading state while checking admin access
   if (isLoading) {
@@ -62,8 +71,55 @@ export default function AdminLayout({
 
   return (
     <div className='min-h-screen bg-gray-50 flex'>
-      {/* Sidebar - Fixed on left */}
-      <aside className='w-64 bg-white border-r border-gray-200 fixed h-full flex flex-col'>
+      {/* Mobile top navigation bar with white background */}
+      <div className='lg:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-200 z-50 flex items-center px-4'>
+        {/* Mobile menu button */}
+        <button
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          className='p-2 rounded-lg hover:bg-gray-100'
+        >
+          {sidebarOpen ? (
+            <X className='h-6 w-6 text-gray-600' />
+          ) : (
+            <Menu className='h-6 w-6 text-gray-600' />
+          )}
+        </button>
+
+        {/* Logo in top nav for mobile */}
+        <Link href='/admin/dashboard' className='ml-3 flex items-center gap-2'>
+          <div className='w-10 h-10 flex-shrink-0'>
+            <Image
+              src='/logos-icon.png'
+              alt='Logos Development'
+              width={40}
+              height={40}
+              className='object-contain w-full h-full'
+            />
+          </div>
+          <div className='font-bold text-base font-[family-name:var(--font-safe-light-accent)]'>
+            Logos Admin
+          </div>
+        </Link>
+      </div>
+
+      {/* Overlay for mobile */}
+      {sidebarOpen && (
+        <div
+          className='lg:hidden fixed inset-0 bg-black bg-opacity-50 z-40 mt-16'
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar - Fixed on desktop, slide-in on mobile */}
+      <aside
+        className={`
+          w-64 bg-white border-r border-gray-200 fixed flex flex-col z-40
+          transition-transform duration-300 ease-in-out
+          top-16 bottom-0 lg:top-0 lg:h-full
+          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+          lg:translate-x-0
+        `}
+      >
         <div className='flex-1 overflow-y-auto'>
           <div className='p-6'>
             {/* Logo */}
@@ -99,6 +155,7 @@ export default function AdminLayout({
                 return (
                   <Link key={item.href} href={item.href}>
                     <div
+                      onClick={() => setSidebarOpen(false)}
                       className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors cursor-pointer ${
                         isActive
                           ? 'bg-blue-50 text-blue-600 font-medium'
@@ -138,8 +195,8 @@ export default function AdminLayout({
             size='sm'
             className='w-full'
             onClick={() =>
-              signOut(() => {
-                window.location.href = '/';
+              signOut({
+                redirectUrl: '/',
               })
             }
           >
@@ -149,8 +206,10 @@ export default function AdminLayout({
         </div>
       </aside>
 
-      {/* Main content - With left margin to account for fixed sidebar */}
-      <main className='ml-64 flex-1 pl-16 pr-12 py-12'>{children}</main>
+      {/* Main content - Responsive padding */}
+      <main className='flex-1 lg:ml-64 px-4 sm:px-6 lg:px-12 py-6 sm:py-8 lg:py-12 pt-16 lg:pt-12 overflow-x-hidden'>
+        {children}
+      </main>
     </div>
   );
 }
