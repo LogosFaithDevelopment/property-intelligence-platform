@@ -3,7 +3,7 @@
 > AI-powered platform connecting churches with affordable housing developers through intelligent property evaluation and investment-grade reporting.
 
 **Production Site:** [logos.lotspecs.com](https://logos.lotspecs.com)  
-**Status:** Production Ready - November 2025  
+**Status:** Production Ready - November 13th 2025  
 **Client:** Logos Faith Development
 
 ---
@@ -252,7 +252,7 @@ The platform's core is a sophisticated financial modeling system that evaluates 
 
 - **3/4/5-Story Analysis** - Evaluates low-rise, mid-rise, and high-rise development options
 - **IRR Projections** - 7-year Internal Rate of Return calculations
-- **Unit Mix Optimization** - 10% studios, 80% 1-bedroom, 10% 2-bedroom
+- **Unit Mix Optimization** - 10% studios, 80% 1-bedroom, 10% 2-bedroom - optional to change for different score
 - **Tiered Construction Costs** - $275K (3-story), $325K (4-story), $415K (5-story) per unit
 - **HUD FMR Integration** - Location-specific rent projections by county
 - **Operating Expense Modeling** - 40% OpEx ratio with detailed breakdowns
