@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Property Intelligence Platform - Quick Start Script
-# This script helps you get the backend running quickly
+# Property Intelligence Platform - This script is no longer needed. 
+
 
 echo "🚀 Property Intelligence Platform - Backend Setup"
 echo "=================================================="
