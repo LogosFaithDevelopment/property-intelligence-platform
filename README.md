@@ -4,7 +4,7 @@
 
 **Production Site:** [logos.lotspecs.com](https://logos.lotspecs.com)  
 **Status:** Production Ready - November 13th 2025  
-**Client:** Logos Faith Development
+**Owner:** Logos Faith Development
 
 ---
 
