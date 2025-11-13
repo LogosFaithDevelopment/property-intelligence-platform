@@ -9,7 +9,7 @@ export default function SignUpPage() {
             Partner With Logos
           </h1>
           <p className='mt-2 text-sm text-gray-600'>
-            Create an account to submit your church property
+            Create an account to get started
           </p>
         </div>
         <SignUp
@@ -22,7 +22,7 @@ export default function SignUpPage() {
           routing='path'
           path='/sign-up'
           signInUrl='/sign-in'
-          afterSignUpUrl='/submit-property'
+          fallbackRedirectUrl='/'
         />
       </div>
     </div>

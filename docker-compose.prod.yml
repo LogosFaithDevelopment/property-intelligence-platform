@@ -1,0 +1,214 @@
+# =============================================================================
+# PRODUCTION DOCKER COMPOSE - LOCAL TESTING ONLY
+# =============================================================================
+# This configuration is for testing production builds locally BEFORE AWS deployment.
+#
+# IMPORTANT: This does NOT include PostgreSQL database.
+# You must connect to an external database (RDS or local PostgreSQL instance).
+#
+# Usage:
+#   1. Create .env.production.local with your configuration
+#   2. Ensure DATABASE_URL points to an accessible PostgreSQL instance
+#   3. Run: docker-compose -f docker-compose.prod.yml --env-file .env.production.local up --build
+#
+# To stop: docker-compose -f docker-compose.prod.yml down
+# =============================================================================
+
+version: '3.8'
+
+services:
+  # ---------------------------------------------------------------------------
+  # Backend Service (FastAPI + Gunicorn + Uvicorn Workers)
+  # ---------------------------------------------------------------------------
+  backend:
+    container_name: property-intel-backend-prod
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - '8000:8000'
+    environment:
+      # Application
+      - ENVIRONMENT=production
+      - DEBUG=false
+      - SECRET_KEY=${SECRET_KEY}
+
+      # Database (MUST point to external PostgreSQL - not included in this compose)
+      - DATABASE_URL=${DATABASE_URL}
+
+      # Redis (optional, if using caching)
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+
+      # Authentication
+      - CLERK_SECRET_KEY=${CLERK_SECRET_KEY}
+      - CLERK_WEBHOOK_SECRET=${CLERK_WEBHOOK_SECRET}
+
+      # AI/ML APIs
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+
+      # Property Data APIs
+      - ATTOM_API_KEY=${ATTOM_API_KEY}
+      - SMARTY_AUTH_ID=${SMARTY_AUTH_ID}
+      - SMARTY_AUTH_TOKEN=${SMARTY_AUTH_TOKEN}
+      - CENSUS_API_KEY=${CENSUS_API_KEY}
+
+      # Security
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1,backend}
+
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:8000/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    restart: unless-stopped
+
+    networks:
+      - app-network
+
+    # Resource limits (adjust based on your needs)
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+
+  # ---------------------------------------------------------------------------
+  # Frontend Service (Next.js Standalone)
+  # ---------------------------------------------------------------------------
+  frontend:
+    container_name: property-intel-frontend-prod
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Build arguments needed for Next.js build process
+        - NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://backend:8000}
+        - NEXT_PUBLIC_ENVIRONMENT=production
+    ports:
+      - '3000:3000'
+    environment:
+      # API Configuration
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://backend:8000}
+
+      # Authentication (Clerk)
+      - NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
+
+      # Environment
+      - NEXT_PUBLIC_ENVIRONMENT=production
+
+      # Node
+      - NODE_ENV=production
+
+    depends_on:
+      backend:
+        condition: service_healthy
+
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'wget',
+          '--quiet',
+          '--tries=1',
+          '--spider',
+          'http://localhost:3000/api/health',
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+    restart: unless-stopped
+
+    networks:
+      - app-network
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # ---------------------------------------------------------------------------
+  # Redis (Optional - for caching/sessions)
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: property-intel-redis-prod
+    ports:
+      - '6379:6379'
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
+    volumes:
+      - redis-data:/data
+
+# -----------------------------------------------------------------------------
+# Networks
+# -----------------------------------------------------------------------------
+networks:
+  app-network:
+    driver: bridge
+    name: property-intel-network
+
+# -----------------------------------------------------------------------------
+# Volumes
+# -----------------------------------------------------------------------------
+volumes:
+  redis-data:
+    name: property-intel-redis-data
+# =============================================================================
+# NOTES:
+# =============================================================================
+# 1. DATABASE SETUP:
+#    This compose file does NOT include PostgreSQL to simulate RDS setup.
+#    Options for DATABASE_URL:
+#    a) Use your local dev database: postgresql://postgres:postgres@host.docker.internal:5432/property_intel
+#    b) Connect to a test RDS instance: postgresql://user:pass@rds-endpoint.region.rds.amazonaws.com:5432/dbname
+#    c) Use Docker host network: docker-compose --network=host ...
+#
+# 2. ENVIRONMENT VARIABLES:
+#    Create a .env.production.local file in the root directory with all required variables.
+#    See .env.example for reference.
+#
+# 3. TESTING:
+#    Build: docker-compose -f docker-compose.prod.yml build
+#    Start: docker-compose -f docker-compose.prod.yml up
+#    Stop:  docker-compose -f docker-compose.prod.yml down
+#
+# 4. ACCESSING SERVICES:
+#    Frontend: http://localhost:3000
+#    Backend:  http://localhost:8000
+#    API Docs: http://localhost:8000/docs (disabled in production by default)
+#    Health:   http://localhost:8000/health
+#
+# 5. LOGS:
+#    View logs: docker-compose -f docker-compose.prod.yml logs -f
+#    Backend:   docker-compose -f docker-compose.prod.yml logs -f backend
+#    Frontend:  docker-compose -f docker-compose.prod.yml logs -f frontend
+#
+# 6. RESOURCE LIMITS:
+#    Adjust CPU/memory limits in deploy.resources based on your host machine.
+#    Remove limits entirely if testing on a powerful development machine.
+# =============================================================================

@@ -81,6 +81,24 @@ class Assessment(BaseModel, UUIDMixin):
     development_involvement_level = Column(String(50), nullable=True)
     special_requirements = Column(Text, nullable=True)
     
+    # Property Improvement Needs
+    property_improvement_needs = Column(JSON, nullable=True)  # Array of: ["hvac", "roof", "landscaping", "painting", "interior", "other"]
+    
+    # Capital/Financing Need
+    capital_financing_need = Column(String(100), nullable=True)  # Free-form text up to 100 characters
+    
+    # Phase 2: Deal Breaker Fields (LOGOS Requirements)
+    existing_debt_amount = Column(Float, nullable=True)  # Current church debt amount
+    debt_to_value_ratio = Column(Float, nullable=True)  # Calculated: debt / assessed_value (deal breaker if >20%)
+    expects_sanctuary_replacement = Column(Boolean, nullable=True)  # Does church expect new sanctuary?
+    sanctuary_replacement_cost_estimate = Column(Float, nullable=True)  # Estimated cost if yes
+    
+    # Phase 3: Partnership Enhancement Fields (LOGOS Requirements)
+    decision_making_authority = Column(String(50), nullable=True)  # "pastor", "board", "congregation", "denomination"
+    decision_timeline = Column(String(50), nullable=True)  # "immediate", "1-3_months", "3-6_months", "6-12_months", "unsure"
+    accepts_60_40_ownership = Column(Boolean, nullable=True)  # Willing to accept 60% LOGOS / 40% Church split
+    willing_to_pay_deposit = Column(Boolean, nullable=True)  # Willing to pay $5K refundable deposit
+    
     # AI Scoring Results (0-100 scale)
     overall_score = Column(Float, nullable=True)
     location_score = Column(Float, nullable=True)
@@ -142,30 +160,48 @@ class Assessment(BaseModel, UUIDMixin):
     
     @property
     def score_grade(self) -> str:
-        """Convert numeric score to letter grade"""
+        """
+        Convert numeric score to letter grade
+        
+        Updated Oct 2025: Passing score raised to 70%
+        Financial viability is now 100% of score (other factors informational only)
+        """
         if not self.overall_score:
             return "N/A"
         
+        # Passing grades (70%+)
         if self.overall_score >= 90:
-            return "A+"
+            return "A+ (Excellent)"
         elif self.overall_score >= 85:
-            return "A"
+            return "A (Excellent)"
         elif self.overall_score >= 80:
-            return "A-"
+            return "A- (Very Good)"
         elif self.overall_score >= 75:
-            return "B+"
+            return "B+ (Good)"
         elif self.overall_score >= 70:
-            return "B"
+            return "B (Pass)"
+        
+        # Failing grades (<70%)
         elif self.overall_score >= 65:
-            return "B-"
+            return "C+ (Below Target)"
         elif self.overall_score >= 60:
-            return "C+"
+            return "C (Marginal)"
         elif self.overall_score >= 55:
-            return "C"
+            return "C- (Weak)"
         elif self.overall_score >= 50:
-            return "C-"
+            return "D+ (Poor)"
+        elif self.overall_score >= 40:
+            return "D (Fail)"
         else:
-            return "D"
+            return "F (Reject)"
+    
+    @property
+    def passes_threshold(self) -> bool:
+        """
+        Check if assessment passes the 70% threshold (Oct 2025)
+        Based on financial viability only
+        """
+        return self.overall_score is not None and self.overall_score >= 70.0
     
     def start_processing(self):
         """Mark assessment as processing"""

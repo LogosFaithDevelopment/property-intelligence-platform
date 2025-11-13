@@ -2,12 +2,12 @@ import { SignIn } from '@clerk/nextjs';
 
 export default function SignInPage() {
   return (
-    <div className='flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4 py-12'>
+    <div className='flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4 py-12 -mt-20'>
       <div className='w-full max-w-md'>
         <div className='mb-8 text-center'>
           <h1 className='text-3xl font-bold text-gray-900'>Welcome Back</h1>
           <p className='mt-2 text-sm text-gray-600'>
-            Sign in to continue your property submission
+            Sign in to access your account
           </p>
         </div>
         <SignIn
@@ -20,7 +20,7 @@ export default function SignInPage() {
           routing='path'
           path='/sign-in'
           signUpUrl='/sign-up'
-          afterSignInUrl='/submit-property'
+          fallbackRedirectUrl='/'
         />
       </div>
     </div>

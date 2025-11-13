@@ -20,8 +20,8 @@ export default function SubmissionSuccessPage() {
 
         {/* Description */}
         <p className='mb-6 text-lg text-gray-600'>
-          We've received your church property submission and our team will
-          review it carefully. You'll receive a confirmation email shortly.
+          We've received your submission and our team will
+          respond within 24 to 48 hours.
         </p>
 
         {/* What Happens Next */}
@@ -35,8 +35,8 @@ export default function SubmissionSuccessPage() {
                 1
               </span>
               <span>
-                <strong>Confirmation Email:</strong> You'll receive an email
-                confirming your submission within a few minutes.
+                <strong>Confirmation Email:</strong> You&apos;ll receive an email
+                in a few minutes.
               </span>
             </li>
             <li className='flex items-start'>
@@ -44,22 +44,21 @@ export default function SubmissionSuccessPage() {
                 2
               </span>
               <span>
-                <strong>Property Analysis:</strong> Our team will analyze your
-                property's suitability for affordable housing development.
+                <strong>Property Analysis:</strong> Our team will complete a thorough analysis.
               </span>
             </li>
-            <li className='flex items-start'>
+            {/* <li className='flex items-start'>
               <span className='mr-3 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700'>
                 3
               </span>
               <span>
-                <strong>Review & Response:</strong> We'll contact you within 5
+                <strong>Review & Response:</strong> We&apos;ll contact you within 5
                 business days with next steps or any questions.
               </span>
-            </li>
+            </li> */}
             <li className='flex items-start'>
               <span className='mr-3 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700'>
-                4
+                3
               </span>
               <span>
                 <strong>Partnership Discussion:</strong> If your property

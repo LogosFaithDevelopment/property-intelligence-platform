@@ -150,7 +150,7 @@ class LACountyAssessorClient:
             }
             
             logger.info(f"Successfully retrieved LA County property data for {street_address}")
-            logger.info(f"Lot size: {key_fields.get('lot_size_sqft')} sqft ({key_fields.get('lot_size_acres')} acres)")
+            logger.info(f"Building sqft: {key_fields.get('building_sqft')} | Lot size not available from LA County API")
             return result
             
         except httpx.HTTPError as e:
@@ -357,11 +357,14 @@ class LACountyAssessorClient:
         }
         
         # Property characteristics
-        sqft_main = raw_data.get('SQFTmain')
+        sqft_main = raw_data.get('SQFTmain')  # This is BUILDING sqft, not lot size
         characteristics = {
-            # Lot dimensions
-            'lot_size_sqft': sqft_main,
-            'lot_size_acres': round(sqft_main / 43560, 2) if sqft_main else None,
+            # Lot dimensions - NOT AVAILABLE in LA County API
+            # Note: SQFTmain is building square footage, not lot size
+            # Users must manually enter lot size or use ATTOM API
+            'lot_size_sqft': None,  # Not available in LA County data
+            'lot_size_acres': None,  # Not available in LA County data
+            'building_sqft': sqft_main,  # Actual building square footage
             
             # Building info
             'year_built': raw_data.get('YearBuilt1'),
@@ -502,8 +505,9 @@ class LACountyAssessorClient:
         
         return {
             # Property dimensions
-            'lot_size_sqft': characteristics.get('lot_size_sqft'),
-            'lot_size_acres': characteristics.get('lot_size_acres'),
+            'lot_size_sqft': characteristics.get('lot_size_sqft'),  # Not available from LA County
+            'lot_size_acres': characteristics.get('lot_size_acres'),  # Not available from LA County
+            'building_sqft': characteristics.get('building_sqft'),  # Actual building square footage
             
             # Property details
             'year_built': characteristics.get('year_built'),

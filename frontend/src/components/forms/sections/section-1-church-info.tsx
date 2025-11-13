@@ -36,21 +36,19 @@ export function Section1ChurchInfo({ form }: Section1ChurchInfoProps) {
   return (
     <div className='space-y-6'>
       <div>
-        <h2 className='text-2xl font-bold'>Church Information</h2>
-        <p className='text-muted-foreground mt-1'>
-          Tell us about your church and congregation
-        </p>
+        <h2 className='text-2xl font-bold'>Contact Information</h2>
+        <p className='text-muted-foreground mt-1'>Tell us about your entity</p>
       </div>
 
       <div className='space-y-4'>
-        {/* Church Name */}
+        {/* Entity Name */}
         <FormField
           control={form.control}
           name='church_name'
           render={({ field }) => (
             <FormItem>
               <FormLabel>
-                Church Name <span className='text-red-500'>*</span>
+                Entity Name <span className='text-red-500'>*</span>
               </FormLabel>
               <FormControl>
                 <Input
@@ -64,29 +62,7 @@ export function Section1ChurchInfo({ form }: Section1ChurchInfoProps) {
           )}
         />
 
-        {/* Legal Name (optional) */}
-        <FormField
-          control={form.control}
-          name='legal_name'
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Legal Name (if different)</FormLabel>
-              <FormControl>
-                <Input
-                  placeholder='e.g., Grace Community Church, Inc.'
-                  {...field}
-                  value={field.value ?? ''}
-                />
-              </FormControl>
-              <FormDescription>
-                The official legal name of your organization
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        {/* 🔥 NEW FIELD: Entity Type (required dropdown) */}
+        {/* Entity Type (required dropdown) */}
         <FormField
           control={form.control}
           name='entity_type'
@@ -95,203 +71,51 @@ export function Section1ChurchInfo({ form }: Section1ChurchInfoProps) {
               <FormLabel>
                 Entity Type <span className='text-red-500'>*</span>
               </FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
-                <FormControl>
+              <FormControl>
+                <Select
+                  onValueChange={field.onChange}
+                  value={field.value ?? undefined}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder='Select entity type' />
                   </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {ENTITY_TYPE_OPTIONS.map((option) => (
-                    <SelectItem key={option} value={option}>
-                      {option}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FormDescription>
-                Select the legal structure of your organization
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        {/* 🔥 NEW FIELD: EIN Number (optional masked input) */}
-        <FormField
-          control={form.control}
-          name='ein_number'
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel className='flex items-center gap-2'>
-                EIN Number
-                <div className='group relative'>
-                  <InfoIcon className='h-4 w-4 text-muted-foreground' />
-                  <div className='absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 p-2 bg-popover text-popover-foreground text-sm rounded-md shadow-md border z-10'>
-                    Employer Identification Number for tax purposes. Format:
-                    XX-XXXXXXX (e.g., 12-3456789)
-                  </div>
-                </div>
-              </FormLabel>
-              <FormControl>
-                <Input
-                  placeholder='12-3456789'
-                  maxLength={10}
-                  {...field}
-                  value={field.value ?? ''}
-                  onChange={(e) => {
-                    // Auto-format EIN as user types
-                    let value = e.target.value.replace(/\D/g, '');
-                    if (value.length > 2) {
-                      value = value.slice(0, 2) + '-' + value.slice(2, 9);
-                    }
-                    field.onChange(value);
-                  }}
-                />
+                  <SelectContent>
+                    {ENTITY_TYPE_OPTIONS.map((type) => (
+                      <SelectItem key={type} value={type}>
+                        {type}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </FormControl>
-              <FormDescription>
-                Format: XX-XXXXXXX (optional, but helpful for verification)
-              </FormDescription>
               <FormMessage />
             </FormItem>
           )}
         />
 
-        {/* 🔥 NEW FIELD: Website (optional URL input) */}
+        {/* Website (optional URL input) */}
         <FormField
           control={form.control}
           name='website'
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Church Website</FormLabel>
+              <FormLabel>Website</FormLabel>
               <FormControl>
                 <Input
-                  type='url'
-                  placeholder='https://yourchurch.org'
+                  type='text'
+                  placeholder='e.g., www.yourwebsite.org or yourwebsite.org'
                   {...field}
                   value={field.value ?? ''}
                 />
               </FormControl>
-              <FormDescription>
-                Your church&apos;s website (optional)
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        {/* Denomination */}
-        <FormField
-          control={form.control}
-          name='denomination'
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Denomination</FormLabel>
-              <FormControl>
-                <Input
-                  placeholder='e.g., Baptist, Methodist, Non-denominational'
-                  {...field}
-                  value={field.value ?? ''}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        {/* Founded Year */}
-        <FormField
-          control={form.control}
-          name='founded_year'
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Founded Year</FormLabel>
-              <FormControl>
-                <Input
-                  type='number'
-                  placeholder='e.g., 1985'
-                  {...field}
-                  value={
-                    field.value === undefined ||
-                    field.value === null ||
-                    isNaN(field.value)
-                      ? ''
-                      : String(field.value)
-                  }
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    field.onChange(val === '' ? undefined : Number(val));
-                  }}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        {/* Congregation Size */}
-        <FormField
-          control={form.control}
-          name='congregation_size'
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>
-                Congregation Size <span className='text-red-500'>*</span>
-              </FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder='Select congregation size' />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {CONGREGATION_SIZE_OPTIONS.map((option) => (
-                    <SelectItem key={option} value={option}>
-                      {option} members
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        {/* Annual Budget */}
-        <FormField
-          control={form.control}
-          name='annual_budget'
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Annual Budget (optional)</FormLabel>
-              <FormControl>
-                <Input
-                  type='number'
-                  placeholder='e.g., 500000'
-                  {...field}
-                  value={
-                    field.value === undefined ||
-                    field.value === null ||
-                    isNaN(field.value)
-                      ? ''
-                      : String(field.value)
-                  }
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    field.onChange(val === '' ? undefined : Number(val));
-                  }}
-                />
-              </FormControl>
-              <FormDescription>
-                Your church&apos;s approximate annual budget in dollars
-              </FormDescription>
+              <FormDescription>Your website (optional)</FormDescription>
               <FormMessage />
             </FormItem>
           )}
         />
       </div>
 
-      {/* Contact Information */}
+      {/* Primary Contact */}
       <div className='pt-6 border-t'>
         <h3 className='text-lg font-semibold mb-4'>Primary Contact</h3>
         <div className='space-y-4'>
@@ -326,7 +150,7 @@ export function Section1ChurchInfo({ form }: Section1ChurchInfoProps) {
                 <FormControl>
                   <Input
                     type='email'
-                    placeholder='pastor@church.org'
+                    placeholder='contact@example.org'
                     {...field}
                     value={field.value ?? ''}
                   />
@@ -359,92 +183,76 @@ export function Section1ChurchInfo({ form }: Section1ChurchInfoProps) {
         </div>
       </div>
 
-      {/* Church Address */}
+      {/* Ownership & Financial */}
       <div className='pt-6 border-t'>
-        <h3 className='text-lg font-semibold mb-4'>Church Address</h3>
+        <h3 className='text-lg font-semibold mb-4'>Ownership & Financial</h3>
         <div className='space-y-4'>
+          {/* Current as-is Land Value - Owner Reported */}
           <FormField
             control={form.control}
-            name='street_address'
+            name='assessed_value'
             render={({ field }) => (
               <FormItem>
-                <FormLabel>
-                  Street Address <span className='text-red-500'>*</span>
-                </FormLabel>
+                <FormLabel>Owner Reported Current Value</FormLabel>
                 <FormControl>
                   <Input
-                    placeholder='123 Main Street'
+                    type='number'
+                    placeholder='e.g., 2500000'
                     {...field}
-                    value={field.value ?? ''}
+                    value={
+                      field.value === undefined ||
+                      field.value === null ||
+                      isNaN(field.value)
+                        ? ''
+                        : String(field.value)
+                    }
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      field.onChange(val === '' ? undefined : Number(val));
+                    }}
                   />
                 </FormControl>
+                <FormDescription>
+                  Your estimate of the property's current market value
+                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
           />
 
-          <div className='grid grid-cols-1 md:grid-cols-3 gap-4'>
-            <FormField
-              control={form.control}
-              name='city'
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>
-                    City <span className='text-red-500'>*</span>
-                  </FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder='Los Angeles'
-                      {...field}
-                      value={field.value ?? ''}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name='state'
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>
-                    State <span className='text-red-500'>*</span>
-                  </FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder='CA'
-                      maxLength={2}
-                      {...field}
-                      value={field.value ?? ''}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name='zip_code'
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>
-                    ZIP Code <span className='text-red-500'>*</span>
-                  </FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder='90001'
-                      {...field}
-                      value={field.value ?? ''}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
+          {/* Existing Debt Amount */}
+          <FormField
+            control={form.control}
+            name='existing_debt_amount'
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Existing Debt Amount</FormLabel>
+                <FormControl>
+                  <Input
+                    type='number'
+                    placeholder='e.g., 500000'
+                    {...field}
+                    value={
+                      field.value === undefined ||
+                      field.value === null ||
+                      isNaN(field.value)
+                        ? ''
+                        : String(field.value)
+                    }
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      field.onChange(val === '' ? undefined : Number(val));
+                    }}
+                  />
+                </FormControl>
+                <FormDescription>
+                  Total amount of mortgages, liens, or other debts on the
+                  property
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
         </div>
       </div>
     </div>
