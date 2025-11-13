@@ -5,10 +5,8 @@
 
 // Entity Type Options (maps to tax_exempt_status in backend)
 export const ENTITY_TYPE_OPTIONS = [
-  '501(c)(3) Nonprofit',
-  'Religious Corporation',
-  'Church/Religious Organization',
-  'Unincorporated Association',
+  'For Profit Company',
+  'Faith Based Organization',
   'Other',
 ] as const;
 
@@ -74,6 +72,29 @@ export const REVENUE_SHARING_OPTIONS = [
 
 export type RevenueSharingPreference = (typeof REVENUE_SHARING_OPTIONS)[number];
 
+// ========== PHASE 2 & 3: LOGOS DEAL FRAMEWORK OPTIONS ==========
+
+// Decision Making Authority Options (Phase 3)
+export const DECISION_AUTHORITY_OPTIONS = [
+  'pastor',
+  'board',
+  'congregation',
+  'denomination',
+] as const;
+
+export type DecisionAuthority = (typeof DECISION_AUTHORITY_OPTIONS)[number];
+
+// Decision Timeline Options (Phase 3)
+export const DECISION_TIMELINE_OPTIONS = [
+  'immediate',
+  '1-3_months',
+  '3-6_months',
+  '6-12_months',
+  'unsure',
+] as const;
+
+export type DecisionTimeline = (typeof DECISION_TIMELINE_OPTIONS)[number];
+
 /**
  * Complete Church Submission Form Data
  * This matches the backend API payload structure
@@ -111,6 +132,15 @@ export interface ChurchSubmissionFormData {
   latitude?: number;
   longitude?: number;
 
+  // Multi-Address Support (NEW FIELDS)
+  demolish_all_structures?: boolean; // Plan to demolish all existing structures
+  additional_addresses?: Array<{
+    address: string;
+    city: string;
+    state: string;
+    zip_code: string;
+  }>; // Additional addresses for multi-parcel properties
+
   // Property Characteristics
   lot_size_sqft?: number;
   lot_size_acres?: number; // Calculated from lot_size_sqft
@@ -124,6 +154,7 @@ export interface ChurchSubmissionFormData {
   // ========== SECTION 3: OWNERSHIP & FINANCIAL ==========
   owns_property_free_clear: boolean; // CRITICAL - must be true
   willing_to_ground_lease: boolean;
+  existing_debt_amount?: number; // Existing debt/mortgage on the property
   has_mortgage?: boolean;
   mortgage_balance?: number;
   assessed_value?: number;
@@ -145,6 +176,10 @@ export interface ChurchSubmissionFormData {
   affordability_target?: AffordabilityTarget;
   revenue_sharing_preference?: RevenueSharingPreference;
   development_involvement_level?: InvolvementLevel;
+
+  // ========== SECTION 7: PROPERTY IMPROVEMENT & FINANCING NEEDS ==========
+  property_improvement_needs?: string[]; // List of needed improvements
+  capital_financing_need?: string; // Description of capital/financing needs
 }
 
 /**

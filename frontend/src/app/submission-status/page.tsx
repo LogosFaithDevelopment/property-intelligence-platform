@@ -58,7 +58,7 @@ export default function SubmissionStatusPage() {
       color: 'green',
       title: 'Approved',
       description:
-        "Great news! Your property has been approved. We'll contact you shortly to discuss next steps.",
+        "Great news! Your property has been approved. We&apos;ll contact you shortly to discuss next steps.",
     },
     rejected: {
       icon: XCircle,

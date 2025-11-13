@@ -1,4 +1,4 @@
-# FastAPI Production Dependencies
+# FastAPI Python Production Dependencies
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
 pydantic[email]==2.5.0
@@ -29,6 +29,7 @@ openai==1.3.7
 scikit-learn==1.3.2
 pandas==2.1.4
 numpy==1.25.2
+numpy-financial==1.0.0
 
 # Geospatial
 geoalchemy2==0.14.2

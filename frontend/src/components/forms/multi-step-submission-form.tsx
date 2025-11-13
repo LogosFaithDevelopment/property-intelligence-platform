@@ -12,10 +12,6 @@ import { useSubmitProperty } from '@/hooks/useSubmissions';
 import { toast } from 'sonner';
 import { Section1ChurchInfo } from './sections/section-1-church-info';
 import { Section2PropertyDetails } from './sections/section-2-property-details';
-import { Section3Ownership } from './sections/section-3-ownership';
-import { Section4Approval } from './sections/section-4-approval';
-import { Section5Parking } from './sections/section-5-parking';
-import { Section6Timeline } from './sections/section-6-timeline';
 import type { z } from 'zod';
 
 type FormData = z.infer<typeof churchSubmissionSchema>;
@@ -24,69 +20,28 @@ type FormData = z.infer<typeof churchSubmissionSchema>;
 const STEP_FIELDS = {
   1: [
     'church_name',
-    'legal_name',
-    'denomination',
-    'founded_year',
     'entity_type',
-    'ein_number',
     'website',
-    'street_address',
-    'city',
-    'state',
-    'zip_code',
-    'congregation_size',
-    'annual_budget',
     'primary_contact_name',
     'primary_contact_email',
     'primary_contact_phone',
+    'assessed_value',
+    'existing_debt_amount',
   ] as const,
   2: [
     'property_address',
     'property_city',
     'property_state',
     'property_zip_code',
-    // latitude and longitude are optional and set by map picker (not validated here)
     'lot_size_sqft',
-    'lot_size_acres',
-    'current_usage',
-    'zoning_description',
-    'available_build_sqft',
     'build_area_notes',
-  ] as const,
-  3: [
-    'owns_property_free_clear',
-    'willing_to_ground_lease',
-    'has_mortgage',
-    'mortgage_balance',
-    'assessed_value',
-  ] as const,
-  4: [
-    'congregation_voted',
-    'vote_percentage',
-    'leadership_support',
-    'denomination_approval_needed',
-  ] as const,
-  5: [
-    'current_parking_spaces',
-    'parking_spaces_needed_after',
-    'special_requirements',
-  ] as const,
-  6: [
-    'timeline_preference',
-    'preferred_unit_count',
-    'affordability_target',
-    'revenue_sharing_preference',
-    'development_involvement_level',
+    'zoning_description',
   ] as const,
 };
 
 const STEPS = [
-  { id: 1, name: 'Church Information', component: Section1ChurchInfo },
+  { id: 1, name: 'Contact Information', component: Section1ChurchInfo },
   { id: 2, name: 'Property Details', component: Section2PropertyDetails },
-  { id: 3, name: 'Ownership & Financial', component: Section3Ownership },
-  { id: 4, name: 'Congregation Approval', component: Section4Approval },
-  { id: 5, name: 'Parking & Development', component: Section5Parking },
-  { id: 6, name: 'Timeline & Preferences', component: Section6Timeline },
 ];
 
 // Utility to clean form data for enums and numbers (matches backend expectations)
@@ -121,11 +76,12 @@ const DRAFT_STEP_KEY = 'church-submission-step';
 export function MultiStepSubmissionForm() {
   const [currentStep, setCurrentStep] = useState(1);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [isTransitioning, setIsTransitioning] = useState(false);
   const router = useRouter();
   const { mutate: submitProperty, isPending } = useSubmitProperty();
 
   const form = useForm<FormData>({
-    resolver: zodResolver(churchSubmissionSchema),
+    resolver: zodResolver(churchSubmissionSchema) as any,
     mode: 'onBlur',
     defaultValues: {
       // Church defaults
@@ -150,6 +106,8 @@ export function MultiStepSubmissionForm() {
       property_city: '',
       property_state: '',
       property_zip_code: '',
+      demolish_all_structures: false,
+      additional_addresses: [],
       latitude: null,
       longitude: null,
       lot_size_sqft: undefined,
@@ -164,11 +122,20 @@ export function MultiStepSubmissionForm() {
       has_mortgage: false,
       mortgage_balance: undefined,
       assessed_value: undefined,
+      // Phase 2: Deal Breaker defaults
+      existing_debt_amount: undefined,
+      expects_sanctuary_replacement: undefined,
+      sanctuary_replacement_cost_estimate: undefined,
       // Approval defaults
       congregation_voted: undefined,
       vote_percentage: undefined,
       leadership_support: undefined,
       denomination_approval_needed: undefined,
+      // Phase 3: Partnership Quality defaults
+      decision_making_authority: undefined,
+      decision_timeline: undefined,
+      accepts_60_40_ownership: undefined,
+      willing_to_pay_deposit: undefined,
       // Parking defaults
       current_parking_spaces: undefined,
       parking_spaces_needed_after: undefined,
@@ -198,9 +165,8 @@ export function MultiStepSubmissionForm() {
           // Reset form with saved data
           form.reset(parsedDraft);
           toast.info('Draft loaded! Continue where you left off.');
-          console.log('✅ Loaded draft from localStorage:', parsedDraft);
         } catch (error) {
-          console.error('❌ Failed to load draft:', error);
+          // Silent fail - draft loading is not critical
           localStorage.removeItem(DRAFT_STORAGE_KEY);
         }
       }
@@ -222,7 +188,6 @@ export function MultiStepSubmissionForm() {
         localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(data));
         localStorage.setItem(DRAFT_STEP_KEY, currentStep.toString());
         setLastSaved(new Date());
-        console.log('💾 Draft auto-saved');
       }
     });
 
@@ -234,7 +199,6 @@ export function MultiStepSubmissionForm() {
     if (typeof window !== 'undefined') {
       localStorage.removeItem(DRAFT_STORAGE_KEY);
       localStorage.removeItem(DRAFT_STEP_KEY);
-      console.log('🗑️ Draft cleared');
     }
   };
 
@@ -265,8 +229,18 @@ export function MultiStepSubmissionForm() {
 
     if (isValid) {
       if (currentStep < STEPS.length) {
+        console.log(
+          `✅ Validation passed - Advancing from step ${currentStep} to ${
+            currentStep + 1
+          }`
+        );
+        setIsTransitioning(true);
         setCurrentStep((prev) => prev + 1);
         window.scrollTo({ top: 0, behavior: 'smooth' });
+        // Clear transition flag after a brief delay
+        setTimeout(() => setIsTransitioning(false), 300);
+      } else {
+        console.log(`⚠️ Already on last step (${currentStep}), not advancing`);
       }
     } else {
       // Get the errors for better feedback
@@ -323,6 +297,18 @@ export function MultiStepSubmissionForm() {
       fixedData.longitude === undefined
     ) {
       fixedData.longitude = null;
+    }
+
+    // Normalize website URL - add https:// if missing
+    if (fixedData.website && typeof fixedData.website === 'string') {
+      const website = fixedData.website.trim();
+      if (
+        website &&
+        !website.startsWith('http://') &&
+        !website.startsWith('https://')
+      ) {
+        fixedData.website = `https://${website}`;
+      }
     }
 
     console.log('🔧 Fixed data:', fixedData);
@@ -424,13 +410,13 @@ export function MultiStepSubmissionForm() {
             Step {currentStep} of {STEPS.length}
           </span>
           <span>
-            {Math.round((currentStep / STEPS.length) * 100)}% Complete
+            {Math.round(((currentStep - 1) / STEPS.length) * 100)}% Complete
           </span>
         </div>
         <div className='mt-2 h-2 w-full overflow-hidden rounded-full bg-gray-200'>
           <div
             className='h-full bg-blue-500 transition-all duration-300'
-            style={{ width: `${(currentStep / STEPS.length) * 100}%` }}
+            style={{ width: `${((currentStep - 1) / STEPS.length) * 100}%` }}
           />
         </div>
       </div>
@@ -440,14 +426,33 @@ export function MultiStepSubmissionForm() {
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            // Get form data directly without validation
-            const data = form.getValues();
-            onSubmit(data);
+            console.log(
+              `📝 Form onSubmit triggered - Current step: ${currentStep} of ${STEPS.length}, isTransitioning: ${isTransitioning}`
+            );
+
+            // PREVENT submission if we're transitioning between steps
+            if (isTransitioning) {
+              console.log('🚫 Ignoring submit during transition');
+              return;
+            }
+
+            // Only allow submission if on the last step
+            if (currentStep === STEPS.length) {
+              console.log('✅ On last step - submitting form');
+              const data = form.getValues();
+              onSubmit(data);
+            } else {
+              console.log(
+                `⏭️ Not on last step (step ${currentStep}) - calling handleNext instead`
+              );
+              // If not on last step, treat it like clicking Next button
+              handleNext();
+            }
           }}
           className='space-y-8'
         >
           <div className='rounded-lg border bg-white p-6 shadow-sm'>
-            <CurrentStepComponent form={form} />
+            <CurrentStepComponent form={form as any} />
           </div>
 
           {/* Navigation Buttons */}

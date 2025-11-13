@@ -3,6 +3,7 @@ Database Configuration and Setup
 SQLAlchemy 2.0 with async support and PostGIS for geospatial queries
 """
 
+import asyncio
 import logging
 
 from app.config import get_settings
@@ -26,7 +27,17 @@ engine = create_async_engine(
 
 # Create sync engine for PDF generation (ReportLab requires sync)
 # Convert async URL to sync URL
-sync_database_url = settings.database_url.replace('postgresql+asyncpg', 'postgresql+psycopg2')
+if settings.database_url.startswith("postgresql://"):
+    sync_database_url = settings.database_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+else:
+    sync_database_url = settings.database_url
+
+# Convert asyncpg SSL parameter to psycopg2 format
+if '?ssl=require' in sync_database_url:
+    sync_database_url = sync_database_url.replace('?ssl=require', '?sslmode=require')
+elif '&ssl=require' in sync_database_url:
+    sync_database_url = sync_database_url.replace('&ssl=require', '&sslmode=require')
+
 sync_engine = create_engine(
     sync_database_url,
     echo=False,  # Don't echo for sync operations
@@ -75,6 +86,30 @@ async def create_tables():
         await conn.run_sync(Base.metadata.create_all)
         
         logger.info("✅ Database tables created successfully")
+
+
+async def connect_with_retry(max_attempts=10):
+    """
+    Attempt to connect to database with exponential backoff.
+    Returns True if successful, False if all attempts failed.
+    Never raises exceptions or exits - keeps app alive for health checks.
+    """
+    delay = 1
+    for attempt in range(1, max_attempts + 1):
+        try:
+            logger.info(f"Attempting database connection (attempt {attempt}/{max_attempts})...")
+            await create_tables()
+            logger.info("✅ Database connected and tables ready")
+            return True
+        except Exception as e:
+            logger.error(f"❌ Database connection failed (attempt {attempt}/{max_attempts}): {str(e)}")
+            if attempt < max_attempts:
+                logger.info(f"⏳ Retrying in {delay} seconds...")
+                await asyncio.sleep(min(30, delay))
+                delay = delay * 2
+            else:
+                logger.error("⚠️  Database still not ready after all retries; continuing without fatal exit")
+    return False
 
 
 async def get_db() -> AsyncSession:
@@ -140,3 +175,4 @@ async def get_db_info() -> dict:
             "status": "error",
             "error": str(e)
         }
+

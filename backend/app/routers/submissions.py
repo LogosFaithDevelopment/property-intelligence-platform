@@ -19,24 +19,54 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-async def trigger_property_enrichment(property_id: int, db: AsyncSession):
+async def trigger_property_enrichment_and_assessment(property_id: int, assessment_id: int):
     """
-    Background task to trigger property enrichment
+    Background task to trigger property enrichment AND AI assessment
     This runs asynchronously after the submission is created
+    
+    Steps:
+    1. Enrich property data from external APIs
+    2. Run AI assessment scoring
+    
+    NOTE: Creates its own database session since this runs in background
     """
     try:
-        from app.services.property_enrichment import PropertyEnrichmentService
-        
-        logger.info(f"Starting background enrichment for property {property_id}")
-        
-        enrichment_service = PropertyEnrichmentService(db)
-        await enrichment_service.enrich_property(property_id)
-        
-        logger.info(f"✅ Enrichment completed for property {property_id}")
-        
+        # Create a NEW database session for this background task
+        async for db in get_db():
+            try:
+                # STEP 1: Property Enrichment
+                from app.services.property_enrichment import \
+                    PropertyEnrichmentService
+                
+                logger.info(f"🔄 Starting background enrichment for property {property_id}")
+                
+                enrichment_service = PropertyEnrichmentService(db)
+                await enrichment_service.enrich_property(property_id)
+                
+                logger.info(f"✅ Enrichment completed for property {property_id}")
+                
+                # STEP 2: AI Assessment Scoring
+                from app.services.ai_assessment import AIAssessmentService
+                
+                logger.info(f"🤖 Starting AI assessment for assessment {assessment_id}")
+                
+                assessment_service = AIAssessmentService(db)
+                await assessment_service.process_assessment(assessment_id)
+                
+                logger.info(f"✅ AI assessment completed for assessment {assessment_id}")
+                
+                # Commit the changes
+                await db.commit()
+                
+            except Exception as e:
+                await db.rollback()
+                raise e
+            finally:
+                await db.close()
+                
     except Exception as e:
-        logger.error(f"❌ Enrichment failed for property {property_id}: {e}", exc_info=True)
-        # Don't raise - enrichment failure shouldn't block submission
+        logger.error(f"❌ Enrichment/Assessment failed for property {property_id}: {e}", exc_info=True)
+        # Don't raise - failure shouldn't block submission
 
 
 @router.post("/", response_model=SubmissionResponse, status_code=status.HTTP_201_CREATED)
@@ -81,9 +111,13 @@ async def create_submission(
                 )
             
             # Create church
-            church = Church(
-                **submission_data.church.model_dump(exclude_unset=True)
-            )
+            church_data = submission_data.church.model_dump(exclude_unset=True)
+            
+            # Convert HttpUrl to string if present
+            if 'website_url' in church_data and church_data['website_url']:
+                church_data['website_url'] = str(church_data['website_url'])
+            
+            church = Church(**church_data)
             church.user_id = current_user.user_id
             church.verification_status = ChurchStatus.PENDING
             
@@ -99,9 +133,16 @@ async def create_submission(
             
             property_data = submission_data.property.model_dump(exclude_unset=True)
             
+            # DEBUG: Log what we received
+            logger.info(f"🔍 Property data received: demolish_all_structures={property_data.get('demolish_all_structures')}, additional_addresses={property_data.get('additional_addresses')}")
+            
             # Ensure property_type has a value (default to OTHER if not provided)
             if 'property_type' not in property_data or property_data['property_type'] is None:
                 property_data['property_type'] = PropertyType.OTHER
+            
+            # Auto-generate property name if not provided (using church name + city)
+            if 'name' not in property_data or not property_data.get('name'):
+                property_data['name'] = f"{church.name} - {property_data.get('city', 'Property')}"
             
             # Remove fields that shouldn't be set during initial submission
             # These will be populated later by enrichment or admin edits
@@ -145,16 +186,20 @@ async def create_submission(
         )
         
         # ============================================================
-        # STEP 4: Trigger Enrichment (Background Task)
+        # STEP 4: Trigger Enrichment AND AI Assessment (Background Task)
         # ============================================================
-        logger.info(f"Scheduling enrichment for property {property_obj.id}")
-        background_tasks.add_task(trigger_property_enrichment, property_obj.id, db)
+        logger.info(f"Scheduling enrichment and AI assessment for property {property_obj.id}, assessment {assessment.id}")
+        background_tasks.add_task(
+            trigger_property_enrichment_and_assessment, 
+            property_obj.id, 
+            assessment.id
+        )
         
         return SubmissionResponse(
             church_id=church.id,
             property_id=property_obj.id,
             assessment_id=assessment.id,
-            message="Submission created successfully! Enrichment started in background.",
+            message="Submission created successfully! Property enrichment and AI assessment started in background.",
             enrichment_started=True
         )
         

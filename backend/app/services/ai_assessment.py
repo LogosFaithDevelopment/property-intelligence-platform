@@ -148,6 +148,34 @@ class AIAssessmentService:
             await self.db.commit()
             raise
     
+    def _calculate_overall_score(
+        self,
+        location_score: float,
+        market_score: float,
+        financial_score: float,
+        partnership_score: float,
+        risk_score: float
+    ) -> float:
+        """
+        Calculate weighted overall score from individual component scores
+        
+        Weights (must sum to 100%):
+        - Financial Viability: 30%
+        - Market Demand: 25%
+        - Location Quality: 0% (informational only)
+        - Partnership Alignment: 0% (informational only)
+        - Risk Assessment: 0% (informational only)
+        
+        Updated Oct 2025: Financial score is now 100% of total score.
+        Other scores are still calculated but don't affect pass/fail decision.
+        """
+        # Updated Oct 2025: Financial viability is 100% of the score
+        # Other factors are informational but don't affect pass/fail
+        overall = financial_score  # 100% weight on financial viability
+        
+        # Ensure score is within valid range
+        return max(0, min(100, overall))
+    
     async def _analyze_location(
         self,
         property_obj: Property,
@@ -412,6 +440,7 @@ Provide a market demand score (0-100) and brief analysis."""
                 "fema": data_sources.get("fema_flood") or data_sources.get("flood_risk", {}),
                 "poi": data_sources.get("points_of_interest", {}),
                 "crosswalk": data_sources.get("hud_usps_crosswalk", {}),
+                "smarty": data_sources.get("smarty_data", {}).get("data", {}) if data_sources.get("smarty_data") else {},
             }
             
             # Extract HUD data (income limits + FMR)
@@ -616,35 +645,93 @@ Provide a market demand score (0-100) and brief analysis."""
         # Get enrichment data for FMR and flood risk
         enrichment_data = self._extract_enrichment_data(property_obj)
         
-        # PRIORITY: Use client-specified available build space if provided, otherwise use total lot size
-        # This allows churches to specify a portion of their property for development
-        if assessment.available_build_sqft and assessment.available_build_sqft > 0:
-            lot_size_sqft = assessment.available_build_sqft
-            using_available_space = True
-            logger.info(f"Using client-specified available build space: {lot_size_sqft:,} sq ft")
-        else:
-            lot_size_sqft = property_obj.lot_size_sqft or 0
-            using_available_space = False
-            logger.info(f"Using total lot size from property data: {lot_size_sqft:,} sq ft")
+        # PRIORITY ORDER for determining buildable area:
+        # 1. User-specified available build space from form (TRUSTED - user knows their property best)
+        # 2. Smarty API calculated available build space (CALCULATED - for comparison/verification)
+        # 3. Total lot size from property data (FALLBACK - requires verification)
         
-        if lot_size_sqft < 10000:
-            logger.warning(f"Property {property_obj.id} disqualified: {lot_size_sqft} sq ft < 10,000 sq ft minimum")
+        smarty_available_space = enrichment_data.get("smarty", {}).get("available_build_space", {}).get("sqft")
+        smarty_lot_size = enrichment_data.get("smarty", {}).get("lot", {}).get("size_sqft")
+        total_lot_size = property_obj.lot_size_sqft or 0
+        
+        # Track data source and verification requirements
+        build_space_source = None
+        requires_verification = False
+        verification_note = None
+        
+        if assessment.available_build_sqft and assessment.available_build_sqft > 0:
+            # OPTION 1: User-specified available space (PREFERRED - user knows their property)
+            lot_size_sqft = assessment.available_build_sqft
+            build_space_source = "user_specified"
+            requires_verification = False  # Trust user input
+            using_available_space = True
+            
+            # Log comparison with Smarty data if available
+            if smarty_available_space and smarty_available_space > 0:
+                difference = lot_size_sqft - smarty_available_space
+                pct_diff = (difference / smarty_available_space) * 100 if smarty_available_space > 0 else 0
+                logger.info(f"✅ Using user-specified available build space: {lot_size_sqft:,} sq ft")
+                logger.info(f"   Smarty calculated: {smarty_available_space:,} sq ft (difference: {difference:+,} sq ft / {pct_diff:+.1f}%)")
+                
+                # Flag significant discrepancies for review
+                if abs(pct_diff) > 20:
+                    logger.warning(f"   ⚠️ Large discrepancy detected - may warrant verification call")
+                    verification_note = (
+                        f"User specified {lot_size_sqft:,} sqft vs Smarty calculated {smarty_available_space:,} sqft "
+                        f"({difference:+,} sqft difference, {pct_diff:+.1f}%). Consider verification call if discrepancy is unexpected."
+                    )
+            else:
+                logger.info(f"✅ Using user-specified available build space: {lot_size_sqft:,} sq ft (no Smarty data for comparison)")
+            
+        elif smarty_available_space and smarty_available_space > 0:
+            # OPTION 2: Smarty calculated available space (FALLBACK - for comparison)
+            lot_size_sqft = smarty_available_space
+            build_space_source = "smarty_calculated"
+            requires_verification = True  # Flag for user to confirm
+            using_available_space = True
+            
+            verification_note = (
+                f"Using Smarty calculated available space ({lot_size_sqft:,} sqft). "
+                f"User did not specify available space. Recommend asking user to confirm this value."
+            )
+            logger.warning(f"⚠️ Using Smarty calculated available build space: {lot_size_sqft:,} sq ft - USER CONFIRMATION RECOMMENDED")
+            logger.warning(f"   Total lot size: {total_lot_size:,} sq ft")
+            
+        else:
+            # OPTION 3: Total lot size (LAST RESORT)
+            lot_size_sqft = total_lot_size
+            build_space_source = "total_lot_unverified"
+            requires_verification = True
+            using_available_space = False
+            
+            # Generate verification note
+            verification_note = (
+                f"Using total lot size ({lot_size_sqft:,} sqft) as no building data available. "
+                f"Call user to verify actual available build space after accounting for existing structures, "
+                f"parking, setbacks, and protected areas."
+            )
+            logger.warning(f"⚠️ Using total lot size: {lot_size_sqft:,} sq ft - USER CONFIRMATION REQUIRED (no building data)")
+
+        # Updated Oct 2025: Minimum lot size reduced from 10,000 to 5,000 sq ft
+        if lot_size_sqft < 5000:
+            logger.warning(f"Property {property_obj.id} disqualified: {lot_size_sqft} sq ft < 5,000 sq ft minimum")
             return 0.0, {
                 "score": 0.0,
                 "disqualified": True,
                 "disqualification_reason": "Below Logos minimum lot size requirement",
                 "lot_size_sqft": lot_size_sqft,
-                "minimum_required_sqft": 10000,
+                "minimum_required_sqft": 5000,
                 "using_available_space": using_available_space,
-                "note": "Property does not meet Logos Faith Development's 10,000 sq ft minimum threshold"
+                "note": "Property does not meet Logos Faith Development's 5,000 sq ft minimum threshold (updated Oct 2025)"
             }
         
         # Calculate unit capacity using the determined lot size (available space or total)
         unit_capacity_info = self._calculate_unit_capacity(property_obj, lot_size_sqft_override=lot_size_sqft)
         feasible_units = unit_capacity_info["feasible_units"]
+        stories = unit_capacity_info.get("stories", 4)  # Default to 4-story
         within_target_range = 40 <= feasible_units <= 140
         
-        cost_per_unit_info = self._estimate_cost_per_unit(property_obj, feasible_units)
+        cost_per_unit_info = self._estimate_cost_per_unit(property_obj, feasible_units, stories=stories)
         cost_per_unit = cost_per_unit_info["cost_per_unit"]
         
         # Pass property location data for geographic disaster filtering
@@ -663,10 +750,11 @@ Provide a market demand score (0-100) and brief analysis."""
         score = 75.0
         
         # BONUS: Larger available space = better score (proportional to size above minimum)
-        # Score increases for every 10,000 sqft above the minimum, up to +15 points
-        if lot_size_sqft >= 10000:
-            excess_sqft = lot_size_sqft - 10000
-            # Award 1 point per 5,000 sqft above minimum (max +15 points at 85,000 sqft)
+        # Updated Oct 2025: Minimum changed from 10,000 to 5,000 sq ft
+        # Score increases for every 5,000 sqft above the minimum, up to +15 points
+        if lot_size_sqft >= 5000:
+            excess_sqft = lot_size_sqft - 5000
+            # Award 1 point per 5,000 sqft above minimum (max +15 points at 80,000 sqft)
             size_bonus = min(15, (excess_sqft / 5000) * 1)
             if size_bonus > 0:
                 score += size_bonus
@@ -711,10 +799,65 @@ Provide a market demand score (0-100) and brief analysis."""
             adjusted_cost_per_unit
         )
         
+        # Generate multi-story scenarios (3, 4, 5 stories)
+        multi_story_scenarios = self._generate_multi_story_scenarios(
+            property_obj=property_obj,
+            enrichment_data=enrichment_data,
+            flood_cost_per_unit=flood_cost_per_unit,
+            lot_size_sqft=lot_size_sqft,
+            unit_capacity_info=unit_capacity_info
+        )
+        
+        # IRR Scoring (LOGOS target: 20% IRR)
+        irr_percent = revenue_projections.get("irr_percent")
+        if irr_percent and irr_percent >= 20.0:
+            score += 15
+            logger.info(f"✓ Property {property_obj.id}: IRR {irr_percent}% meets LOGOS 20% target (+15 points)")
+        elif irr_percent and irr_percent >= 15.0:
+            score += 8
+            logger.info(f"✓ Property {property_obj.id}: IRR {irr_percent}% approaching target (+8 points)")
+        elif irr_percent and irr_percent < 12.0:
+            score -= 10
+            logger.warning(f"⚠ Property {property_obj.id}: IRR {irr_percent}% below viable threshold (-10 points)")
+        
+        # Phase 2: Debt-to-Value Ratio Check (LOGOS requirement: <20%)
+        debt_to_value_ratio = None
+        if assessment.existing_debt_amount and property_obj.assessed_value:
+            debt_to_value_ratio = assessment.existing_debt_amount / property_obj.assessed_value
+            assessment.debt_to_value_ratio = debt_to_value_ratio  # Store calculated ratio
+            
+            if debt_to_value_ratio > 0.20:
+                # CRITICAL DEAL BREAKER - Excessive existing debt
+                score -= 20
+                logger.warning(f"🚨 DEAL BREAKER: Property {property_obj.id} has {debt_to_value_ratio:.1%} debt-to-value ratio (>20% threshold)")
+                logger.warning(f"   Existing debt: ${assessment.existing_debt_amount:,.0f}, Property value: ${property_obj.assessed_value:,.0f}")
+            elif debt_to_value_ratio > 0.10:
+                score -= 10
+                logger.warning(f"⚠ Property {property_obj.id}: Moderate debt {debt_to_value_ratio:.1%} of property value (-10 points)")
+            elif debt_to_value_ratio > 0:
+                logger.info(f"✓ Property {property_obj.id}: Minimal debt {debt_to_value_ratio:.1%} of property value (acceptable)")
+        elif assessment.existing_debt_amount and not property_obj.assessed_value:
+            logger.warning(f"⚠ Cannot calculate debt-to-value ratio: Property value unknown (debt amount: ${assessment.existing_debt_amount:,.0f})")
+        
+        # Phase 2: Sanctuary Replacement Expectation Check
+        if assessment.expects_sanctuary_replacement:
+            score -= 10
+            logger.warning(f"⚠ Property {property_obj.id}: Church expects sanctuary replacement (-10 points)")
+            logger.warning(f"   This complicates development and may not align with LOGOS model")
+            if assessment.sanctuary_replacement_cost_estimate:
+                logger.info(f"   Estimated replacement cost: ${assessment.sanctuary_replacement_cost_estimate:,.0f}")
+        
         score = min(100, max(0, score))
         
         total_development_cost = cost_per_unit * feasible_units
         adjusted_total_cost = adjusted_cost_per_unit * feasible_units
+        
+        # Calculate Total Project Cost (display only - doesn't affect IRR)
+        # Formula: Development Cost + (Land Value - Existing Debt)
+        land_value = property_obj.assessed_value or 0
+        existing_debt = assessment.existing_debt_amount or 0
+        net_land_value = max(0, land_value - existing_debt)
+        total_project_cost = adjusted_total_cost + net_land_value
         
         analysis = {
             "score": score,
@@ -727,6 +870,17 @@ Provide a market demand score (0-100) and brief analysis."""
             "available_build_sqft": assessment.available_build_sqft if using_available_space else None,
             "total_lot_size_sqft": property_obj.lot_size_sqft,
             "build_area_notes": assessment.build_area_notes if using_available_space else None,
+            
+            # Show BOTH user and Smarty values for comparison
+            "user_specified_available_sqft": assessment.available_build_sqft if assessment.available_build_sqft else None,
+            "smarty_calculated_available_sqft": smarty_available_space if smarty_available_space else None,
+            "used_value_sqft": lot_size_sqft,
+            "used_value_source": build_space_source,
+            
+            # Verification tracking
+            "build_space_source": build_space_source,
+            "requires_manual_verification": requires_verification,
+            "verification_note": verification_note,
             
             "unit_capacity": unit_capacity_info,
             "feasible_units": feasible_units,
@@ -746,26 +900,239 @@ Provide a market demand score (0-100) and brief analysis."""
             "adjusted_development_cost": adjusted_total_cost,
             "adjusted_development_cost_formatted": f"${adjusted_total_cost:,.0f}",
             
+            # Total Project Cost (Oct 2025): Dev Cost + Net Land Value
+            "total_project_cost": total_project_cost,
+            "total_project_cost_formatted": f"${total_project_cost:,.0f}",
+            "total_project_cost_breakdown": {
+                "development_cost": adjusted_total_cost,
+                "land_value": land_value,
+                "existing_debt": existing_debt,
+                "net_land_value": net_land_value
+            },
+            
             "revenue_projections": revenue_projections,
+            "multi_story_scenarios": multi_story_scenarios,  # NEW: 3/4/5 story comparison
             
             "flood_risk_analysis": flood_analysis,
+            
+            "phase2_deal_breakers": {
+                "existing_debt_amount": assessment.existing_debt_amount,
+                "debt_to_value_ratio": debt_to_value_ratio,
+                "debt_status": "Clean title" if not assessment.existing_debt_amount else "Acceptable (<20%)" if debt_to_value_ratio and debt_to_value_ratio <= 0.20 else "DEAL BREAKER (>20%)" if debt_to_value_ratio and debt_to_value_ratio > 0.20 else "Unknown",
+                "expects_sanctuary_replacement": assessment.expects_sanctuary_replacement,
+                "sanctuary_replacement_cost_estimate": assessment.sanctuary_replacement_cost_estimate,
+                "sanctuary_status": "Issue" if assessment.expects_sanctuary_replacement else "Acceptable"
+            },
             
             "funding_sources": ["private_equity", "church_land_contribution", "construction_loan"],
             "notes": [
                 "No LIHTC (private funding model)",
                 "Church retains land ownership",
                 "Zero land acquisition cost",
-                f"Flood mitigation adds ${flood_cost_per_unit:,}/unit" if flood_cost_per_unit > 0 else "No flood mitigation required"
+                f"Total Project Cost: ${total_project_cost:,.0f} (Dev Cost + Net Land Value)",
+                f"Flood mitigation adds ${flood_cost_per_unit:,}/unit" if flood_cost_per_unit > 0 else "No flood mitigation required",
+                f"Existing debt: ${assessment.existing_debt_amount:,.0f} ({debt_to_value_ratio:.1%} of value)" if assessment.existing_debt_amount and debt_to_value_ratio else "No existing debt",
+                "Church expects sanctuary replacement" if assessment.expects_sanctuary_replacement else "No sanctuary replacement expected"
             ]
         }
         
         return score, analysis
     
+    def _calculate_lihtc_credits(
+        self,
+        total_dev_cost: float,
+        property_state: str = "CA"
+    ) -> Dict[str, Any]:
+        """
+        Calculate LIHTC 4% + State tax credits
+        
+        LOGOS Model: Uses 4% LIHTC (non-competitive) for affordable housing
+        
+        Federal LIHTC:
+        - 4% of eligible basis annually for 10 years
+        - Eligible basis = ~85% of total development cost
+        
+        California State Credit:
+        - 20% bonus on top of federal credit
+        
+        Syndication:
+        - Credits sold to investors at 85-90% of total value
+        - Proceeds received at construction completion (Year 2)
+        - Reduces/eliminates equity requirement
+        
+        Args:
+            total_dev_cost: Total development cost
+            property_state: State for state credit calculation
+            
+        Returns:
+            Dictionary with LIHTC credit calculations
+        """
+        if total_dev_cost <= 0:
+            return {
+                "status": "insufficient_data",
+                "syndication_proceeds": 0,
+                "total_credits": 0
+            }
+        
+        # Eligible basis (typically 85% of costs - land is excluded)
+        eligible_basis = total_dev_cost * 0.85
+        
+        # Federal LIHTC 4% annual credit
+        annual_federal_credit = eligible_basis * 0.04
+        
+        # Total federal credits over 10 years
+        total_federal_10yr = annual_federal_credit * 10
+        
+        # California State Credit (20% of federal)
+        total_ca_credit = 0
+        if property_state == "CA":
+            total_ca_credit = total_federal_10yr * 0.20
+        
+        # Total credits
+        total_credits = total_federal_10yr + total_ca_credit
+        
+        # Syndication proceeds (typically 87% of credit value)
+        syndication_factor = 0.87
+        syndication_proceeds = total_credits * syndication_factor
+        
+        return {
+            "status": "calculated",
+            "eligible_basis": eligible_basis,
+            "eligible_basis_formatted": f"${eligible_basis:,.0f}",
+            "annual_federal_credit": annual_federal_credit,
+            "total_federal_10yr": total_federal_10yr,
+            "total_ca_state_credit": total_ca_credit,
+            "total_credits": total_credits,
+            "total_credits_formatted": f"${total_credits:,.0f}",
+            "syndication_factor": syndication_factor,
+            "syndication_proceeds": syndication_proceeds,
+            "syndication_proceeds_formatted": f"${syndication_proceeds:,.0f}",
+            "reduces_equity_by": syndication_proceeds,
+            "timing": "Received at construction completion (Year 2)",
+            "notes": [
+                "LIHTC 4% non-competitive credits (by-right for bond-financed projects)",
+                f"Federal: {annual_federal_credit:,.0f}/year for 10 years",
+                f"California: 20% state credit bonus (${total_ca_credit:,.0f})",
+                f"Credits sold to investor at {syndication_factor*100}% of value",
+                "Proceeds reduce equity requirement substantially"
+            ]
+        }
+    
+    def _generate_multi_story_scenarios(
+        self,
+        property_obj: Property,
+        enrichment_data: Dict[str, Any],
+        flood_cost_per_unit: float,
+        lot_size_sqft: float,
+        unit_capacity_info: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Generate financial projections for 3, 4, and 5 story scenarios.
+        
+        Returns dictionary with scenarios for each story count, including:
+        - Unit count
+        - Development cost
+        - NOI
+        - IRR
+        - Recommended scenario
+        """
+        scenarios = unit_capacity_info.get("scenarios", {})
+        
+        if not scenarios:
+            # Fallback if scenarios weren't generated
+            return {
+                "status": "unavailable",
+                "message": "Multi-story scenarios not generated"
+            }
+        
+        scenario_financials = {}
+        best_irr = 0
+        recommended = None
+        
+        for scenario_name, scenario_data in scenarios.items():
+            units = scenario_data["feasible_units"]
+            stories = scenario_data["stories"]
+            
+            # Calculate costs for this scenario (pass stories for tiered costs)
+            cost_info = self._estimate_cost_per_unit(property_obj, units, stories=stories)
+            base_cost_per_unit = cost_info["cost_per_unit"]
+            adjusted_cost_per_unit = base_cost_per_unit + flood_cost_per_unit
+            total_dev_cost = adjusted_cost_per_unit * units
+            
+            # Get tiered construction months for this unit count
+            construction_months = self._get_construction_months(units)
+            
+            # Calculate revenue projections for this scenario
+            revenue = self._calculate_revenue_projections(
+                enrichment_data,
+                units,
+                adjusted_cost_per_unit,
+                construction_months=construction_months
+            )
+            
+            noi = revenue.get("net_operating_income", 0)
+            irr_percent = revenue.get("irr_percent", 0)
+            equity_required = total_dev_cost * 0.20  # CIO updated: 20% equity
+            
+            # Determine if scenario is not recommended (IRR < 10%)
+            not_recommended = irr_percent is not None and irr_percent < 10.0
+            recommendation_warning = "⚠️ Not Recommended (IRR < 10%)" if not_recommended else None
+            
+            scenario_financials[scenario_name] = {
+                "stories": stories,
+                "units": units,
+                "buildable_sqft": scenario_data["buildable_sqft"],
+                "cost_per_unit": adjusted_cost_per_unit,
+                "construction_months": construction_months,
+                "total_development_cost": total_dev_cost,
+                "total_development_cost_formatted": f"${total_dev_cost:,.0f}",
+                "equity_required": equity_required,
+                "equity_required_formatted": f"${equity_required:,.0f}",
+                "debt_financing": total_dev_cost * 0.80,
+                "debt_financing_formatted": f"${total_dev_cost * 0.80:,.0f}",
+                "annual_revenue": revenue.get("total_annual_revenue", 0),
+                "annual_revenue_formatted": f"${revenue.get('total_annual_revenue', 0):,.0f}",
+                "noi": noi,
+                "noi_formatted": f"${noi:,.0f}",
+                "irr_percent": irr_percent,
+                "cap_rate": revenue.get("cap_rate", 0),
+                "cash_on_cash": revenue.get("cash_on_cash_return", 0),
+                "meets_irr_target": irr_percent >= 20.0 if irr_percent else False,
+                "not_recommended": not_recommended,
+                "recommendation_warning": recommendation_warning
+            }
+            
+            # Track best IRR
+            if irr_percent and irr_percent > best_irr:
+                best_irr = irr_percent
+                recommended = scenario_name
+        
+        # If no clear winner, default to 4-story
+        if not recommended:
+            recommended = "4_story"
+        
+        return {
+            "scenarios": scenario_financials,
+            "recommended": recommended,
+            "recommended_reason": f"Best IRR at {best_irr:.1f}%" if best_irr > 0 else "Standard 4-story configuration",
+            "notes": [
+                "Financial Model (Oct 2025): Tiered costs by height",
+                "3-story: $275K/unit, 4-story: $325K/unit, 5-story: $415K/unit",
+                "Tiered developer fees: 8%/7%/6%/5% by scale",
+                "Tiered construction: 18/24/32 months by scale",
+                "425 sqft avg unit, 20% equity/65% permanent loan, tiered brokerage (2.0%-5.0%)",
+                "All scenarios assume 65% site coverage",
+                "Unit mix: 10% studios, 80% 1BD, 10% 2BD",
+                f"Recommended: {recommended.replace('_', ' ').title()} with {best_irr:.1f}% IRR"
+            ]
+        }
+    
     def _calculate_revenue_projections(
         self,
         enrichment_data: Dict[str, Any],
         unit_count: int,
-        cost_per_unit: float
+        cost_per_unit: float,
+        construction_months: Optional[int] = None
     ) -> Dict[str, Any]:
         """
         Calculate revenue projections using actual HUD Fair Market Rent data
@@ -776,23 +1143,40 @@ Provide a market demand score (0-100) and brief analysis."""
         - Net Operating Income (NOI)
         - Return on Investment (ROI)
         - Cash-on-cash return
+        
+        Args:
+            construction_months: Optional construction timeline (tiered: 18/24/32 months)
         """
         
         fmr_data = enrichment_data.get("fair_market_rent", {})
         
+        # AMI-based fallback defaults (Oct 2025) when HUD FMR API fails
+        fallback_rents = {
+            "studio": 1450,
+            "1_bedroom": 1800,
+            "2_bedroom": 2400
+        }
+        
         if not fmr_data or not fmr_data.get("success"):
-            return {
-                "status": "no_data",
-                "message": "FMR data not available - revenue projections are estimates",
-                "estimated_revenue": "Contact local Housing Authority for Section 8 payment standards"
-            }
+            # Use fallback values
+            rent_by_bedroom = fallback_rents
+            data_source = "AMI-based fallback defaults"
+            logger.warning("HUD FMR data unavailable - using AMI fallback rents")
+        else:
+            rent_by_bedroom = fmr_data.get("rent_by_bedroom", {})
+            data_source = f"HUD FMR {fmr_data.get('year', 'N/A')}"
+            
+            # Apply fallback for any missing bedroom types
+            for bedroom_type, fallback_rent in fallback_rents.items():
+                if not rent_by_bedroom.get(bedroom_type):
+                    rent_by_bedroom[bedroom_type] = fallback_rent
+                    logger.warning(f"Missing {bedroom_type} FMR - using fallback ${fallback_rent}")
         
-        rent_by_bedroom = fmr_data.get("rent_by_bedroom", {})
-        
+        # Updated unit mix per CIO feedback: 10% studios, 80% 1BD, 10% 2BD
         unit_mix = {
-            "1_bedroom": {"count": int(unit_count * 0.20), "fmr": rent_by_bedroom.get("1_bedroom", 0)},
-            "2_bedroom": {"count": int(unit_count * 0.60), "fmr": rent_by_bedroom.get("2_bedroom", 0)},
-            "3_bedroom": {"count": int(unit_count * 0.20), "fmr": rent_by_bedroom.get("3_bedroom", 0)}
+            "studio": {"count": int(unit_count * 0.10), "fmr": rent_by_bedroom.get("studio", 0)},
+            "1_bedroom": {"count": int(unit_count * 0.80), "fmr": rent_by_bedroom.get("1_bedroom", 0)},
+            "2_bedroom": {"count": int(unit_count * 0.10), "fmr": rent_by_bedroom.get("2_bedroom", 0)}
         }
         
         annual_revenue = 0
@@ -811,7 +1195,8 @@ Provide a market demand score (0-100) and brief analysis."""
                     "annual_revenue": annual_revenue_type
                 }
         
-        operating_expense_ratio = 0.42
+        # Updated OpEx ratio per CIO feedback: 30% (down from 42%)
+        operating_expense_ratio = 0.30
         operating_expenses = annual_revenue * operating_expense_ratio
         
         noi = annual_revenue - operating_expenses
@@ -821,12 +1206,26 @@ Provide a market demand score (0-100) and brief analysis."""
         roi_percent = (noi / total_cost * 100) if total_cost > 0 else 0
         cap_rate = (noi / total_cost * 100) if total_cost > 0 else 0
         
-        equity_investment = total_cost * 0.30
+        # CIO UPDATED: 20% equity / 80% debt (down from 30% / 70%)
+        equity_investment = total_cost * 0.20
         cash_on_cash = (noi / equity_investment * 100) if equity_investment > 0 else 0
+        
+        # Get tiered construction months if not provided
+        if construction_months is None:
+            construction_months = self._get_construction_months(unit_count)
+        
+        # Calculate IRR (LOGOS target: 20%) with updated methodology
+        irr_analysis = self._calculate_project_irr_with_tax_benefits(
+            total_dev_cost=total_cost,
+            annual_noi=noi,
+            unit_count=unit_count,
+            assessed_value=total_cost,  # Use development cost as assessed value
+            construction_months=construction_months  # Pass tiered construction timeline
+        )
         
         return {
             "status": "calculated",
-            "data_source": f"HUD FMR {fmr_data.get('year', 'N/A')}",
+            "data_source": data_source,
             "unit_mix": unit_mix,
             "revenue_by_unit_type": revenue_by_type,
             "total_annual_revenue": annual_revenue,
@@ -838,22 +1237,383 @@ Provide a market demand score (0-100) and brief analysis."""
             "total_development_cost": total_cost,
             "roi_percent": round(roi_percent, 2),
             "cap_rate": round(cap_rate, 2),
+            "yield_on_cost": round(cap_rate, 2),  # LOGOS terminology (same as cap rate)
             "equity_investment_30pct": equity_investment,
             "cash_on_cash_return": round(cash_on_cash, 2),
+            "irr_analysis": irr_analysis,
+            "irr_percent": irr_analysis.get("irr_percent"),
+            "meets_irr_target": irr_analysis.get("meets_logos_target", False),
             "assumptions": [
-                "20% 1BR, 60% 2BR, 20% 3BR unit mix",
-                "42% operating expense ratio (industry standard)",
+                "10% studios, 80% 1BR, 10% 2BR unit mix",
+                "30% operating expense ratio",
                 "100% occupancy (conservative for Section 8)",
-                "30% equity / 70% debt financing"
+                "20% equity / 65% permanent loan (Updated Oct 2025)",
+                "Tiered construction costs: 3-story $275K, 4-story $325K, 5-story $415K",
+                "425 sqft average unit size"
             ],
             "notes": [
                 "Actual FMR may vary by ZIP code within county",
-                "Does not include debt service payments",
-                "Does not include tax abatement benefits (98% CA Welfare exemption)"
+                "IRR calculation WITHOUT tax credits",
+                "Operating expense ratio: 30% (reduced from 42%)",
+                "Construction: 18-32 months (tiered), Lease-up: 4 months, Exit: Year 7, Exit cap: 6%",
+                "Updated Financial Model (Oct 2025): Tiered costs $275K/$325K/$415K, 425 sqft, 20% equity/65% permanent loan, tiered brokerage (2.0%-5.0%)"
             ]
         }
     
-    def _calculate_unit_capacity(self, property_obj: Property, lot_size_sqft_override: Optional[float] = None) -> Dict[str, Any]:
+    def _get_brokerage_fee_rate(self, exit_value: float) -> tuple[float, str]:
+        """
+        Calculate tiered brokerage fee rate based on property exit value.
+        
+        Larger properties command lower broker fees due to economies of scale.
+        
+        Fee Schedule:
+        - < $10M: 5.0%
+        - $10M - $20M: 4.0%
+        - $20M - $30M: 3.0%
+        - $30M - $40M: 2.5%
+        - > $40M: 2.0%
+        
+        Args:
+            exit_value: Property exit value
+            
+        Returns:
+            Tuple of (fee_rate, tier_description)
+        """
+        if exit_value < 10_000_000:
+            return 0.050, "5.0% (under $10M)"
+        elif exit_value < 20_000_000:
+            return 0.040, "4.0% ($10M-$20M)"
+        elif exit_value < 30_000_000:
+            return 0.030, "3.0% ($20M-$30M)"
+        elif exit_value < 40_000_000:
+            return 0.025, "2.5% ($30M-$40M)"
+        else:
+            return 0.020, "2.0% (over $40M)"
+    
+    def _calculate_project_irr_with_tax_benefits(
+        self,
+        total_dev_cost: float,
+        annual_noi: float,
+        unit_count: int,
+        assessed_value: float,
+        construction_months: int = 18,  # Updated to 18 months per CIO feedback
+        operating_years: int = 6,  # Updated to exit at Year 7 (1.5 year construction + 5.5 years operation)
+        exit_cap_rate: float = 0.06,  # Updated to 6% per CIO feedback
+        annual_rent_growth: float = 0.03,  # 3% annual rent growth
+        property_state: str = "CA"
+    ) -> Dict[str, Any]:
+        """
+        Calculate project-level IRR WITHOUT tax credits (per CIO feedback)
+        
+        LOGOS Target: 20% IRR minimum
+        
+        Updated per CIO feedback (removed LIHTC):
+        1. NO LIHTC tax credits or syndication
+        2. Operating expense ratio: 30% (down from 42%)
+        3. Construction: 18 months
+        4. Exit: Year 7 (1.5 years construction + 5.5 years operation)
+        5. Exit cap rate: 6%
+        6. Unit mix: 10% studios (325sf), 80% 1BD (450sf), 10% 2BD (675sf)
+        7. Permanent loan: 65% (down from 80%)
+        
+        Args:
+            total_dev_cost: Total development cost
+            annual_noi: Base year Annual Net Operating Income
+            unit_count: Number of units
+            assessed_value: Property assessed value (for property tax calc)
+            construction_months: Construction duration (default 24)
+            operating_years: Years of operations (default 10)
+            exit_cap_rate: Exit cap rate for property sale (default 4.25%)
+            annual_rent_growth: Annual rent growth rate (default 3%)
+            property_state: State for tax calculations (default CA)
+        
+        Returns:
+            Dictionary with IRR calculation results including tax benefits
+        """
+        try:
+            import numpy as np
+            import numpy_financial as npf
+        except ImportError:
+            logger.warning("numpy_financial not available - IRR calculation skipped")
+            return {
+                "status": "unavailable",
+                "message": "IRR calculation requires numpy_financial package",
+                "irr_percent": None
+            }
+        
+        if total_dev_cost <= 0 or annual_noi <= 0:
+            return {
+                "status": "insufficient_data",
+                "message": "Cannot calculate IRR without valid development cost and NOI",
+                "irr_percent": None
+            }
+        
+        # NO LIHTC tax credits per CIO feedback
+        # NO CA Welfare property tax exemption
+        # Simple equity-based IRR calculation
+        
+        # Calculate equity requirement (CIO UPDATED: 20% equity, 65% permanent loan)
+        equity_required = total_dev_cost * 0.20
+        
+        logger.info(f"💰 IRR Calculation (NO Tax Credits - Updated Oct 2025):")
+        logger.info(f"   Total Dev Cost: ${total_dev_cost:,.0f}")
+        logger.info(f"   Equity Required (20%): ${equity_required:,.0f}")
+        logger.info(f"   Permanent Loan (65%): ${total_dev_cost * 0.65:,.0f}")
+        logger.info(f"   Annual NOI: ${annual_noi:,.0f}")
+        logger.info(f"   Construction Period: {construction_months} months")
+        logger.info(f"   Lease-up Period: 4 months (Year 2 has 8 months NOI)")
+        logger.info(f"   Exit: Year {1.5 + operating_years} (after construction)")
+        logger.info(f"   Exit Cap Rate: {exit_cap_rate*100}%")
+        
+        # Build cash flow array
+        cash_flows = []
+        
+        # Construction phase: 18 months = 1.5 years
+        # Split equity investment over construction period
+        construction_years_float = construction_months / 12.0
+        
+        # Year 0: First half of equity
+        cash_flows.append(-equity_required * 0.5)
+        
+        # Year 1: Second half of equity
+        cash_flows.append(-equity_required * 0.5)
+        
+        # Operating phase: Years 2-7 (6 years of operations after construction)
+        # Year 2: Lease-up period (4 months) = 8 months of NOI (reduced from 12)
+        lease_up_months = 4
+        year_2_noi = annual_noi * ((12 - lease_up_months) / 12)  # 8/12 = 67% of annual NOI
+        cash_flows.append(year_2_noi)
+        
+        # Years 3-7: Full operating years with rent growth
+        for year in range(1, operating_years):
+            year_noi = annual_noi * ((1 + annual_rent_growth) ** year)
+            cash_flows.append(year_noi)
+        
+        # Exit at Year 7: Final year NOI + Exit proceeds
+        final_year_noi = annual_noi * ((1 + annual_rent_growth) ** (operating_years - 1))
+        
+        # Calculate exit value and proceeds
+        exit_value = final_year_noi / exit_cap_rate if exit_cap_rate > 0 else 0
+        
+        # Calculate tiered brokerage fee based on property value (updated Oct 2025)
+        brokerage_rate, brokerage_tier = self._get_brokerage_fee_rate(exit_value)
+        brokerage_fee = exit_value * brokerage_rate
+        net_exit_value = exit_value - brokerage_fee
+        
+        # Subtract remaining debt from exit proceeds (65% permanent loan per updated model)
+        debt_amount = total_dev_cost * 0.65
+        exit_proceeds = net_exit_value - debt_amount
+        
+        # Add exit proceeds to final year
+        cash_flows[-1] = cash_flows[-1] + exit_proceeds
+        
+        logger.info(f"   Year 1 NOI: ${annual_noi:,.0f}")
+        logger.info(f"   Final Year ({operating_years}) NOI: ${final_year_noi:,.0f}")
+        logger.info(f"   Exit Value (at {exit_cap_rate*100}% cap): ${exit_value:,.0f}")
+        logger.info(f"   Brokerage Fee ({brokerage_tier}): ${brokerage_fee:,.0f}")
+        logger.info(f"   Net Exit Value (after brokerage): ${net_exit_value:,.0f}")
+        logger.info(f"   Debt Payoff (65% permanent loan): ${debt_amount:,.0f}")
+        logger.info(f"   Net Exit Proceeds: ${exit_proceeds:,.0f}")
+        
+        # Calculate IRR
+        try:
+            irr = npf.irr(cash_flows)
+            irr_percent = round(irr * 100, 2) if irr and not np.isnan(irr) else None
+            
+            meets_target = irr_percent >= 20.0 if irr_percent is not None else False
+            
+            logger.info(f"   Calculated IRR: {irr_percent}% (target: 20%)")
+            logger.info(f"   Cash flows: {[f'${cf:,.0f}' for cf in cash_flows]}")
+            
+            return {
+                "status": "calculated",
+                "irr_percent": irr_percent,
+                "meets_logos_target": meets_target,
+                "target_irr": 20.0,
+                "construction_months": construction_months,
+                "operating_years": operating_years,
+                "exit_cap_rate": exit_cap_rate,
+                "annual_rent_growth": annual_rent_growth,
+                "exit_value": exit_value,
+                "exit_value_formatted": f"${exit_value:,.0f}" if exit_value else "N/A",
+                "brokerage_fee": brokerage_fee,
+                "brokerage_fee_formatted": f"${brokerage_fee:,.0f}",
+                "brokerage_rate": brokerage_rate,
+                "brokerage_rate_percent": f"{brokerage_rate * 100:.1f}%",
+                "brokerage_tier": brokerage_tier,
+                "net_exit_value": net_exit_value,
+                "net_exit_value_formatted": f"${net_exit_value:,.0f}",
+                "exit_proceeds": exit_proceeds,
+                "exit_proceeds_formatted": f"${exit_proceeds:,.0f}",
+                
+                # Equity analysis (NO LIHTC)
+                "equity_required": equity_required,
+                "equity_required_formatted": f"${equity_required:,.0f}",
+                
+                # Cash flow summary
+                "base_noi": annual_noi,
+                "first_year_noi": annual_noi,
+                "final_year_noi": final_year_noi,
+                "noi_growth_total": final_year_noi - annual_noi,
+                "cash_flows_summary": {
+                    "construction_phase": f"-${equity_required:,.0f} equity over {construction_months} months",
+                    "operating_phase": f"+${annual_noi:,.0f}/year (growing {annual_rent_growth*100}%/year)",
+                    "exit": f"+${exit_proceeds:,.0f} net proceeds at year {int(construction_months/12) + operating_years}"
+                },
+                
+                # Assumptions (updated per CIO feedback - Oct 2025)
+                "assumptions": [
+                    f"{construction_months}-month construction period (tiered: 18/24/32 months by scale)",
+                    "4-month lease-up period (Year 2 has 8 months of NOI)",
+                    f"Exit at Year {int(construction_months/12) + operating_years} ({operating_years} years of operations)",
+                    f"{annual_rent_growth*100}% annual rent growth",
+                    f"Exit at {exit_cap_rate*100}% cap rate",
+                    "20% equity / 65% permanent loan (updated from 80% debt)",
+                    f"Tiered brokerage fee: {brokerage_tier} (2.0%-5.0% based on property value)",
+                    "30% operating expense ratio (reduced from 42%)",
+                    "Unit mix: 10% studios (325sf), 80% 1BD (450sf), 10% 2BD (675sf)",
+                    "NO LIHTC tax credits",
+                    "NO syndication"
+                ],
+                
+                # Key highlights
+                "highlights": [
+                    f"Equity required: ${equity_required:,.0f} (20% of ${total_dev_cost:,.0f})",
+                    f"Permanent loan: ${debt_amount:,.0f} (65% LTV)",
+                    f"First year NOI: ${annual_noi:,.0f}",
+                    f"With {annual_rent_growth*100}% rent growth, final year NOI: ${final_year_noi:,.0f}",
+                    f"Exit value: ${exit_value:,.0f} at {exit_cap_rate*100}% cap rate",
+                    f"Brokerage fee ({brokerage_tier}): ${brokerage_fee:,.0f}",
+                    f"Net exit proceeds: ${exit_proceeds:,.0f}",
+                    f"IRR: {irr_percent}% {'MEETS' if meets_target else 'below'} 20% target"
+                ],
+                
+                "notes": [
+                    "IRR calculation WITHOUT tax credits",
+                    "Simplified equity-based return calculation",
+                    "Operating expense ratio reduced to 30% (from 42%)",
+                    "Shorter hold period: 7 years total (1.5 construction + 5.5 operations)",
+                    "Higher exit cap rate: 6% (more conservative)",
+                    "Updated Oct 2025: 65% permanent loan, tiered brokerage (2.0%-5.0%), optimized unit mix (80% 1-beds)"
+                ]
+            }
+            
+        except Exception as e:
+            logger.error(f"Error calculating IRR: {e}", exc_info=True)
+            return {
+                "status": "error",
+                "message": f"IRR calculation error: {str(e)}",
+                "irr_percent": None
+            }
+    
+    def _calculate_property_tax_savings(
+        self,
+        assessed_value: float,
+        property_state: str = "CA"
+    ) -> Dict[str, Any]:
+        """
+        Calculate property tax savings from CA Welfare Exemption
+        
+        California Welfare Exemption (Revenue & Taxation Code Section 214):
+        - 98% property tax exemption for affordable housing
+        - Only pay 2% of normal property tax
+        
+        Args:
+            assessed_value: Property assessed value
+            property_state: State (only CA has this exemption)
+            
+        Returns:
+            Dictionary with property tax savings calculation
+        """
+        if property_state != "CA":
+            return {
+                "status": "not_applicable",
+                "annual_savings": 0,
+                "message": "CA Welfare Exemption only applies to California properties"
+            }
+        
+        if assessed_value <= 0:
+            return {
+                "status": "insufficient_data",
+                "annual_savings": 0,
+                "message": "Cannot calculate property tax without assessed value"
+            }
+        
+        # California average property tax rate: ~1.25% (varies by county)
+        ca_property_tax_rate = 0.0125
+        
+        # Normal annual property tax
+        normal_annual_tax = assessed_value * ca_property_tax_rate
+        
+        # With 98% exemption, only pay 2%
+        with_exemption_tax = normal_annual_tax * 0.02
+        
+        # Annual savings
+        annual_savings = normal_annual_tax - with_exemption_tax
+        
+        return {
+            "status": "calculated",
+            "assessed_value": assessed_value,
+            "assessed_value_formatted": f"${assessed_value:,.0f}",
+            "normal_annual_tax": normal_annual_tax,
+            "with_exemption_tax": with_exemption_tax,
+            "annual_savings": annual_savings,
+            "annual_savings_formatted": f"${annual_savings:,.0f}",
+            "exemption_percentage": 98,
+            "effective_tax_rate": ca_property_tax_rate * 0.02,
+            "notes": [
+                "CA Welfare Exemption provides 98% property tax reduction",
+                "Applies to affordable housing properties",
+                f"Saves approximately ${annual_savings:,.0f} per year",
+                "Increases Net Operating Income substantially"
+            ]
+        }
+    
+    def _calculate_developer_fee(
+        self,
+        total_dev_cost: float,
+        fee_percentage: float = 0.10
+    ) -> Dict[str, Any]:
+        """
+        Calculate developer fee
+        
+        Typical developer fee: 10-15% of total development cost
+        Paid at construction completion (Year 2)
+        
+        Args:
+            total_dev_cost: Total development cost
+            fee_percentage: Developer fee as percentage (default 10%)
+            
+        Returns:
+            Dictionary with developer fee calculation
+        """
+        if total_dev_cost <= 0:
+            return {
+                "status": "insufficient_data",
+                "developer_fee": 0
+            }
+        
+        developer_fee = total_dev_cost * fee_percentage
+        
+        return {
+            "status": "calculated",
+            "developer_fee": developer_fee,
+            "developer_fee_formatted": f"${developer_fee:,.0f}",
+            "fee_percentage": fee_percentage * 100,
+            "total_dev_cost": total_dev_cost,
+            "timing": "Paid at construction completion (Year 2)",
+            "notes": [
+                f"Developer fee: {fee_percentage*100}% of development cost",
+                "Typical range: 10-15% for affordable housing",
+                "Provides developer compensation for project management"
+            ]
+        }
+    
+    def _calculate_unit_capacity(
+        self,
+        property_obj: Property,
+        lot_size_sqft_override: Optional[float] = None
+    ) -> Dict[str, Any]:
         """
         Calculate feasible unit count based on lot size and density assumptions.
         
@@ -867,77 +1627,144 @@ Provide a market demand score (0-100) and brief analysis."""
         lot_size_sqft = lot_size_sqft_override if lot_size_sqft_override is not None else (property_obj.lot_size_sqft or 0)
         lot_size_acres = lot_size_sqft / 43560 if lot_size_sqft > 0 else (property_obj.lot_size_acres or 0)
         
-        units_per_acre = 45
-        site_coverage_factor = 0.85
+        # LOGOS multifamily affordable housing model
+        # Updated per CIO requirements (Oct 2025):
+        # - Average unit size: 425 sqft (down from 481 sqft)
+        # - Construction cost: $325K per unit
+        # - Financing: 20% equity / 80% debt (down from 30% equity / 70% debt)
+        # - Site coverage: 65%
+        site_coverage_factor = 0.65
+        avg_unit_size = 425  # Updated per CIO: 425 sqft average
         
-        developable_acres = lot_size_acres * site_coverage_factor
-        feasible_units = int(developable_acres * units_per_acre)
+        # Calculate buildable sqft across all floors
+        footprint = lot_size_sqft * site_coverage_factor
         
-        sqft_per_unit = 1800
-        units_by_sqft = int((lot_size_sqft * site_coverage_factor) / sqft_per_unit)
+        # Generate scenarios for 3, 4, and 5 stories
+        scenarios = {}
+        recommended_scenario = None
+        best_irr = 0
         
-        final_units = min(feasible_units, units_by_sqft)
+        for stories in [3, 4, 5]:
+            total_buildable_sqft = footprint * stories
+            feasible_units = int(total_buildable_sqft / avg_unit_size)
+            
+            scenarios[f"{stories}_story"] = {
+                "stories": stories,
+                "buildable_sqft": total_buildable_sqft,
+                "feasible_units": feasible_units,
+                "footprint_sqft": footprint,
+                "avg_unit_size": avg_unit_size,
+                "site_coverage_factor": site_coverage_factor
+            }
+            
+            # Track which scenario has best IRR (will be calculated later)
+            if stories == 4:
+                recommended_scenario = f"{stories}_story"
+        
+        # For backward compatibility, return 4-story as default
+        default_scenario = scenarios["4_story"]
         
         return {
-            "feasible_units": final_units,
+            "feasible_units": default_scenario["feasible_units"],
             "lot_size_acres": lot_size_acres,
             "lot_size_sqft": lot_size_sqft,
-            "developable_acres": round(developable_acres, 2),
-            "units_per_acre_assumed": units_per_acre,
+            "buildable_sqft": default_scenario["buildable_sqft"],
+            "footprint_sqft": footprint,
+            "stories": 4,
+            "avg_unit_size": avg_unit_size,
             "site_coverage_factor": site_coverage_factor,
-            "calculation_method": "conservative_estimate",
+            "calculation_method": "multi_story_scenarios",
+            "scenarios": scenarios,  # NEW: All 3/4/5 story scenarios
+            "recommended_scenario": recommended_scenario,
             "notes": [
-                f"Assumes {units_per_acre} units/acre density",
-                f"Accounts for {int((1-site_coverage_factor)*100)}% setbacks/easements",
-                "Final estimate is conservative (lower of two methods)"
+                f"Updated Financial Model (Oct 2025): $325K/unit, 425 sqft avg, 20% equity/80% debt",
+                f"Generated scenarios for 3, 4, and 5 stories with {site_coverage_factor*100}% site coverage",
+                f"3-Story: {scenarios['3_story']['feasible_units']} units ({int(scenarios['3_story']['buildable_sqft']):,} sqft)",
+                f"4-Story: {scenarios['4_story']['feasible_units']} units ({int(scenarios['4_story']['buildable_sqft']):,} sqft) - Recommended",
+                f"5-Story: {scenarios['5_story']['feasible_units']} units ({int(scenarios['5_story']['buildable_sqft']):,} sqft)"
             ]
         }
+    
+    def _get_developer_fee_percentage(self, unit_count: int) -> float:
+        """
+        Get developer fee percentage based on project scale.
+        
+        Updated per CIO (Oct 2025): Tiered developer fees
+        - <60 units: 8%
+        - 60-100 units: 7%
+        - 100-150 units: 6%
+        - 150+ units: 5%
+        """
+        if unit_count < 60:
+            return 0.08
+        elif unit_count < 100:
+            return 0.07
+        elif unit_count < 150:
+            return 0.06
+        else:
+            return 0.05
+    
+    def _get_construction_months(self, unit_count: int) -> int:
+        """
+        Get construction timeline based on project scale.
+        
+        Updated per CIO (Oct 2025): Tiered construction timelines
+        - <50 units: 18 months
+        - 50-150 units: 24 months
+        - 150+ units: 32 months
+        """
+        if unit_count < 50:
+            return 18
+        elif unit_count < 150:
+            return 24
+        else:
+            return 32
     
     def _estimate_cost_per_unit(
         self,
         property_obj: Property,
-        unit_count: int
+        unit_count: int,
+        stories: int = 4
     ) -> Dict[str, Any]:
         """
         Estimate cost per unit for Logos affordable housing model.
         
-        Target: <$325K per unit
+        Updated per CIO (Oct 2025): Tiered construction costs by building height
+        - 3-story: $275K/unit (wood frame, simple construction)
+        - 4-story: $325K/unit (standard mid-rise)
+        - 5-story: $415K/unit (Type I/II construction, higher complexity)
+        Average unit size: 425 sqft
         """
         
-        base_construction_cost_psf = 200
-        avg_unit_size_sqft = 750
+        # CIO UPDATED REQUIREMENT: Tiered costs by building height
+        if stories == 3:
+            base_cost_per_unit = 275000  # Wood frame
+        elif stories == 5:
+            base_cost_per_unit = 415000  # Type I/II construction
+        else:  # stories == 4 (default)
+            base_cost_per_unit = 325000  # Standard mid-rise
         
-        building_construction = base_construction_cost_psf * avg_unit_size_sqft
-        
-        site_work = building_construction * 0.12
-        
-        parking = 25000 * 0.75
-        
-        utilities = 15000 if property_obj.has_water and property_obj.has_sewer else 40000
-        
-        hard_costs_subtotal = building_construction + site_work + parking + utilities
-        soft_costs = hard_costs_subtotal * 0.22
-        
-        financing = hard_costs_subtotal * 0.06
-        
-        developer_fee = hard_costs_subtotal * 0.12
-        
-        total_cost_per_unit = (
-            building_construction + 
-            site_work + 
-            parking + 
-            utilities + 
-            soft_costs + 
-            financing + 
-            developer_fee
-        )
+        # Apply minor scale adjustments for very large or very small projects
+        total_cost_per_unit = base_cost_per_unit
         
         if unit_count >= 100:
-            total_cost_per_unit *= 0.92
+            total_cost_per_unit *= 0.98  # Slight economy of scale
         elif unit_count >= 60:
-            total_cost_per_unit *= 0.95
+            total_cost_per_unit *= 0.99
         elif unit_count <= 30:
-            total_cost_per_unit *= 1.08
+            total_cost_per_unit *= 1.05  # Slightly higher for small projects
+        
+        # Get tiered developer fee percentage
+        developer_fee_pct = self._get_developer_fee_percentage(unit_count)
+        
+        # Estimated breakdown (for reporting purposes)
+        building_construction = total_cost_per_unit * 0.55  # 55% hard construction
+        site_work = total_cost_per_unit * 0.10  # 10% site work
+        parking = total_cost_per_unit * 0.08  # 8% parking
+        utilities = 15000 if property_obj.has_water and property_obj.has_sewer else 40000
+        soft_costs = total_cost_per_unit * 0.15  # 15% soft costs
+        financing = total_cost_per_unit * 0.07  # 7% financing
+        developer_fee = total_cost_per_unit * developer_fee_pct  # Tiered: 8%/7%/6%/5%
         
         return {
             "cost_per_unit": int(total_cost_per_unit),
@@ -951,16 +1778,23 @@ Provide a market demand score (0-100) and brief analysis."""
                 "developer_fee": int(developer_fee)
             },
             "assumptions": {
-                "construction_cost_psf": base_construction_cost_psf,
-                "avg_unit_size_sqft": avg_unit_size_sqft,
+                "base_cost_per_unit": base_cost_per_unit,
+                "stories": stories,
+                "avg_unit_size_sqft": 425,  # CIO updated
                 "parking_spaces_per_unit": 0.75,
                 "unit_count": unit_count,
-                "scale_factor_applied": unit_count >= 60
+                "developer_fee_percentage": developer_fee_pct,
+                "construction_months": self._get_construction_months(unit_count),
+                "scale_factor_applied": unit_count >= 60 or unit_count <= 30
             },
             "notes": [
-                "Costs are 2025 national averages",
+                f"CIO Updated (Oct 2025): Tiered costs - 3-story: $265K, 4-story: $325K, 5-story: $415K",
+                f"Current scenario: {stories}-story building at ${base_cost_per_unit:,}/unit",
+                f"Developer fee: {developer_fee_pct*100}% (tiered by unit count)",
+                f"Construction timeline: {self._get_construction_months(unit_count)} months",
+                "Average unit size: 425 sqft",
                 "Does not include land acquisition (church owns land)",
-                "California Welfare Tax exemption not yet factored"
+                "Financing: 20% equity / 80% debt"
             ]
         }
     
@@ -1060,13 +1894,6 @@ Provide a market demand score (0-100) and brief analysis."""
             score -= 15
             risks.append("Environmental concerns noted")
         
-        # NOTE: Church development experience is NOT a risk factor
-        # Logos Development brings the expertise as the development partner
-        # Church provides land + community support (their actual role)
-        # if not church.previous_development_experience:
-        #     score -= 5
-        #     risks.append("Church lacks development experience")
-        
         score = min(100, max(0, score))
         
         analysis = {
@@ -1135,9 +1962,6 @@ Provide a market demand score (0-100) and brief analysis."""
         
         Analyzes: Flood, Fire (wildfire), Tornado, Hurricane, Earthquake
         NOW filters disasters by distance to prevent false positives
-        (e.g., downtown LA penalized for rural wildfires 300 miles away)
-        
-        Returns combined risk score, mitigation costs, and recommendations
         """
         
         fema_data = enrichment_data.get("fema", {})
@@ -1211,7 +2035,7 @@ Provide a market demand score (0-100) and brief analysis."""
             overall_risk_level = "low"
         
         return {
-            "total_score_penalty": min(40, total_penalty),  # Cap at 40 points
+            "total_score_penalty": min(40, total_penalty),
             "overall_risk_level": overall_risk_level,
             "disaster_risks": {
                 "flood": flood_risk,
@@ -1244,7 +2068,7 @@ Provide a market demand score (0-100) and brief analysis."""
         elif any(flood_zone.startswith(prefix) for prefix in ["A", "AE", "AH", "AO"]):
             return {
                 "type": "flood",
-                "score_penalty": 5,  # Reduced from 10 - informational focus
+                "score_penalty": 5,
                 "risk_level": "moderate",
                 "flood_zone": flood_zone,
                 "event_count": event_count,
@@ -1259,8 +2083,8 @@ Provide a market demand score (0-100) and brief analysis."""
         elif flood_zone.startswith("V"):
             return {
                 "type": "flood",
-                "score_penalty": 15,  # Reduced from 30 - still significant but not crushing
-                "risk_level": "high",  # Downgraded from very_high
+                "score_penalty": 15,
+                "risk_level": "high",
                 "flood_zone": flood_zone,
                 "event_count": event_count,
                 "risks": [
@@ -1289,16 +2113,9 @@ Provide a market demand score (0-100) and brief analysis."""
         property_lon: float = None,
         property_county: str = None
     ) -> Dict[str, Any]:
-        """
-        Wildfire risk analysis with GEOGRAPHIC FILTERING
-        
-        Prevents false positives like urban LA being penalized for rural fires
-        """
-        from app.services.disaster_distance_filter import \
-            DisasterDistanceFilter
+        """Wildfire risk analysis with GEOGRAPHIC FILTERING"""
         
         event_count = fire_history.get("count", 0)
-        all_events = fire_history.get("events", [])
         
         if event_count == 0:
             return {
@@ -1312,110 +2129,27 @@ Provide a market demand score (0-100) and brief analysis."""
                 "geographic_context": "No wildfire events in state"
             }
         
-        # Apply geographic filtering if location data available
-        if property_lat and property_lon and all_events:
-            filtered = DisasterDistanceFilter.filter_disasters_by_distance(
-                disasters=all_events,
-                disaster_type='fire',
-                property_lat=property_lat,
-                property_lon=property_lon,
-                property_county=property_county
-            )
-            
-            # Use DIRECT RISK events only for scoring
-            nearby_count = filtered['direct_count']
-            regional_count = filtered['regional_count']
-            direct_threshold = filtered['thresholds_miles']['direct']
-            
-            context = DisasterDistanceFilter.get_risk_context_message(
-                disaster_type='fire',
-                filtered_data=filtered,
-                property_location=property_county or "this location"
-            )
-            
-            # Score based on nearby events - REDUCED PENALTIES (informational focus)
-            # County-level data means we can't pinpoint exact fire locations
-            # So we keep penalties low and focus on providing information
-            if nearby_count == 0:
-                return {
-                    "type": "fire",
-                    "score_penalty": 0,
-                    "risk_level": "minimal",
-                    "event_count": event_count,
-                    "event_count_nearby": nearby_count,
-                    "event_count_regional": regional_count,
-                    "risks": [],
-                    "mitigation_cost_per_unit": 0,
-                    "geographic_context": context,
-                    "note": f"{event_count} statewide events, NONE in county"
-                }
-            elif nearby_count >= 5:
-                # County has significant fire history - LIGHT penalty, show info
-                return {
-                    "type": "fire",
-                    "score_penalty": 3,  # Reduced from 15
-                    "risk_level": "informational",
-                    "event_count": event_count,
-                    "event_count_nearby": nearby_count,
-                    "event_count_regional": regional_count,
-                    "risks": [
-                        f"ℹ️ {nearby_count} wildfire events in county since 2004",
-                        f"📍 Note: County-level data (actual distance to fires unknown)",
-                        "✓ Recommend fire-resistant materials as best practice",
-                        "✓ Verify insurance requirements with local providers"
-                    ],
-                    "mitigation_cost_per_unit": 3000,  # Reduced from 8000
-                    "geographic_context": context,
-                    "note": "Informational only - county has fire history but exact property risk depends on specific location"
-                }
-            else:
-                # Some county fire history - MINIMAL penalty
-                return {
-                    "type": "fire",
-                    "score_penalty": 1,  # Reduced from 5
-                    "risk_level": "low",
-                    "event_count": event_count,
-                    "event_count_nearby": nearby_count,
-                    "event_count_regional": regional_count,
-                    "risks": [
-                        f"ℹ️ {nearby_count} wildfire events in county since 2004",
-                        "✓ Standard fire safety practices recommended"
-                    ],
-                    "mitigation_cost_per_unit": 1000,  # Reduced from 3000
-                    "geographic_context": context,
-                    "note": "County has limited fire history"
-                }
-        
-        # Fallback: use statewide counts (if no location data)
-        # Apply same reduced penalties - informational focus
+        # Simplified risk assessment based on county-level data
         if event_count >= 5:
             return {
                 "type": "fire",
-                "score_penalty": 3,  # Reduced from 15
+                "score_penalty": 3,
                 "risk_level": "informational",
                 "event_count": event_count,
-                "event_count_nearby": 0,
                 "risks": [
-                    f"ℹ️ {event_count} wildfire events in state since 2004",
-                    "📍 Geographic filtering unavailable - verify local risk",
-                    "✓ Recommend fire-resistant construction as best practice"
+                    f"ℹ️ {event_count} wildfire events in county since 2004",
+                    "✓ Recommend fire-resistant materials as best practice"
                 ],
-                "mitigation_cost_per_unit": 3000,  # Reduced from 8000
-                "geographic_context": "Geographic filtering not available - statewide data shown for reference"
+                "mitigation_cost_per_unit": 3000
             }
         else:
             return {
                 "type": "fire",
-                "score_penalty": 1,  # Reduced from 5
+                "score_penalty": 1,
                 "risk_level": "low",
                 "event_count": event_count,
-                "event_count_nearby": 0,
-                "risks": [
-                    f"ℹ️ {event_count} wildfire event(s) in state since 2004",
-                    "✓ Standard fire safety practices recommended"
-                ],
-                "mitigation_cost_per_unit": 1000,  # Reduced from 3000
-                "geographic_context": "Geographic filtering not available - statewide data shown for reference"
+                "risks": [],
+                "mitigation_cost_per_unit": 1000
             }
     
     def _analyze_tornado_risk(self, tornado_history: Dict[str, Any]) -> Dict[str, Any]:
@@ -1440,11 +2174,9 @@ Provide a market demand score (0-100) and brief analysis."""
                 "event_count": event_count,
                 "risks": [
                     f"{event_count} tornado declarations since 2004",
-                    "Requires enhanced structural reinforcement",
-                    "Safe rooms/storm shelters required",
-                    "Higher construction standards"
+                    "Requires enhanced structural reinforcement"
                 ],
-                "mitigation_cost_per_unit": 10000  # Reinforced framing, safe rooms
+                "mitigation_cost_per_unit": 10000
             }
         else:
             return {
@@ -1452,60 +2184,37 @@ Provide a market demand score (0-100) and brief analysis."""
                 "score_penalty": 5,
                 "risk_level": "moderate",
                 "event_count": event_count,
-                "risks": [
-                    f"{event_count} tornado declaration(s) since 2004",
-                    "Consider enhanced wind resistance"
-                ],
+                "risks": [f"{event_count} tornado declaration(s) since 2004"],
                 "mitigation_cost_per_unit": 4000
             }
     
     def _analyze_hurricane_risk(
-        self, 
+        self,
         hurricane_history: Dict[str, Any],
         property_state: str = None,
         property_county: str = None
     ) -> Dict[str, Any]:
-        """
-        Hurricane risk analysis WITH GEOGRAPHIC FILTERING
-        
-        IMPORTANT: Hurricanes are COASTAL events (Gulf/Atlantic states)
-        California, Nevada, Arizona, etc. should show ZERO hurricane risk
-        even if state has historical tropical storm remnants
-        """
+        """Hurricane risk analysis WITH GEOGRAPHIC FILTERING"""
         
         event_count = hurricane_history.get("count", 0)
         
-        # GEOGRAPHIC FILTER: Hurricane-prone states (coastal Gulf/Atlantic)
+        # Hurricane-prone states (coastal Gulf/Atlantic)
         HURRICANE_STATES = [
-            "FL", "LA", "TX", "MS", "AL", "GA", "SC", "NC", "VA", "MD", 
+            "FL", "LA", "TX", "MS", "AL", "GA", "SC", "NC", "VA", "MD",
             "DE", "NJ", "NY", "CT", "RI", "MA", "NH", "ME", "HI"
         ]
         
-        # If NOT in hurricane-prone state, return ZERO risk even if state has events
         if property_state and property_state not in HURRICANE_STATES:
-            if event_count > 0:
-                return {
-                    "type": "hurricane",
-                    "score_penalty": 0,
-                    "risk_level": "not_applicable",
-                    "event_count": event_count,
-                    "risks": [],
-                    "mitigation_cost_per_unit": 0,
-                    "geographic_context": f"Hurricane risk: NOT APPLICABLE for {property_state}. {event_count} statewide tropical storm remnants listed for reference only. This is NOT a hurricane zone.",
-                    "note": f"{event_count} statewide event(s) were tropical storm remnants, NOT hurricanes"
-                }
-            else:
-                return {
-                    "type": "hurricane",
-                    "score_penalty": 0,
-                    "risk_level": "not_applicable",
-                    "event_count": 0,
-                    "risks": [],
-                    "mitigation_cost_per_unit": 0,
-                    "geographic_context": f"Hurricane risk: NOT APPLICABLE for {property_state}"
-                }
+            return {
+                "type": "hurricane",
+                "score_penalty": 0,
+                "risk_level": "not_applicable",
+                "event_count": event_count,
+                "risks": [],
+                "mitigation_cost_per_unit": 0,
+                "geographic_context": f"Hurricane risk: NOT APPLICABLE for {property_state}"
+            }
         
-        # Only assess hurricane risk for coastal states
         if event_count == 0:
             return {
                 "type": "hurricane",
@@ -1521,14 +2230,8 @@ Provide a market demand score (0-100) and brief analysis."""
                 "score_penalty": 15,
                 "risk_level": "high",
                 "event_count": event_count,
-                "risks": [
-                    f"{event_count} hurricane declarations since 2004",
-                    "Requires hurricane-rated windows/doors",
-                    "Enhanced roof tie-downs",
-                    "Impact-resistant materials",
-                    "Higher insurance costs"
-                ],
-                "mitigation_cost_per_unit": 12000  # Hurricane windows, reinforced roof
+                "risks": [f"{event_count} hurricane declarations since 2004"],
+                "mitigation_cost_per_unit": 12000
             }
         else:
             return {
@@ -1536,47 +2239,33 @@ Provide a market demand score (0-100) and brief analysis."""
                 "score_penalty": 6,
                 "risk_level": "moderate",
                 "event_count": event_count,
-                "risks": [
-                    f"{event_count} hurricane declaration(s) since 2004",
-                    "Consider wind-resistant construction"
-                ],
+                "risks": [f"{event_count} hurricane declaration(s) since 2004"],
                 "mitigation_cost_per_unit": 5000
             }
     
     def _analyze_earthquake_risk(
-        self, 
+        self,
         earthquake_history: Dict[str, Any],
         property_state: str = None
     ) -> Dict[str, Any]:
-        """
-        Earthquake risk analysis WITH GEOGRAPHIC CONTEXT
-        
-        NOTE: California, Alaska, and other seismic zones have inherent risk
-        even if recent federal disaster declarations are low (most quakes don't
-        trigger federal aid). Building codes already mandate seismic design.
-        """
+        """Earthquake risk analysis WITH GEOGRAPHIC CONTEXT"""
         
         event_count = earthquake_history.get("count", 0)
         
-        # HIGH SEISMIC RISK STATES (always apply seismic standards)
         HIGH_SEISMIC_STATES = ["CA", "AK", "WA", "OR", "NV", "UT", "HI"]
         
-        # For high seismic states, add context even if low event count
         if property_state in HIGH_SEISMIC_STATES:
             if event_count == 0:
                 return {
                     "type": "earthquake",
-                    "score_penalty": 5,  # Light penalty for inherent risk
+                    "score_penalty": 5,
                     "risk_level": "moderate",
                     "event_count": event_count,
                     "risks": [
                         f"ℹ️ {property_state} is in a high seismic risk zone",
-                        "✓ Seismic building codes already mandated by state",
-                        "✓ Standard California construction includes earthquake resistance",
-                        "Note: Low federal disaster count doesn't mean low earthquake risk"
+                        "✓ Seismic building codes already mandated by state"
                     ],
-                    "mitigation_cost_per_unit": 0,  # Already in building codes
-                    "geographic_context": f"{property_state} seismic zone - codes mandate earthquake-resistant construction"
+                    "mitigation_cost_per_unit": 0
                 }
             elif event_count >= 2:
                 return {
@@ -1584,14 +2273,8 @@ Provide a market demand score (0-100) and brief analysis."""
                     "score_penalty": 18,
                     "risk_level": "high",
                     "event_count": event_count,
-                    "risks": [
-                        f"{event_count} earthquake declarations since 2004",
-                        "Requires enhanced seismic design standards",
-                        "Foundation reinforcement needed",
-                        "Lateral bracing systems",
-                        "Earthquake insurance required"
-                    ],
-                    "mitigation_cost_per_unit": 15000  # Enhanced seismic retrofitting
+                    "risks": [f"{event_count} earthquake declarations since 2004"],
+                    "mitigation_cost_per_unit": 15000
                 }
             else:
                 return {
@@ -1599,15 +2282,10 @@ Provide a market demand score (0-100) and brief analysis."""
                     "score_penalty": 8,
                     "risk_level": "moderate",
                     "event_count": event_count,
-                    "risks": [
-                        f"{event_count} earthquake declaration(s) since 2004",
-                        f"✓ {property_state} building codes mandate seismic design",
-                        "Standard seismic construction practices apply"
-                    ],
-                    "mitigation_cost_per_unit": 0  # Already in building codes
+                    "risks": [f"{property_state} building codes mandate seismic design"],
+                    "mitigation_cost_per_unit": 0
                 }
         
-        # For non-seismic states
         if event_count == 0:
             return {
                 "type": "earthquake",
@@ -1617,31 +2295,13 @@ Provide a market demand score (0-100) and brief analysis."""
                 "risks": [],
                 "mitigation_cost_per_unit": 0
             }
-        elif event_count >= 2:
-            return {
-                "type": "earthquake",
-                "score_penalty": 18,
-                "risk_level": "high",
-                "event_count": event_count,
-                "risks": [
-                    f"{event_count} earthquake declarations since 2004",
-                    "Requires seismic design standards",
-                    "Foundation reinforcement needed",
-                    "Lateral bracing systems",
-                    "Earthquake insurance required"
-                ],
-                "mitigation_cost_per_unit": 15000  # Seismic retrofitting
-            }
         else:
             return {
                 "type": "earthquake",
                 "score_penalty": 8,
                 "risk_level": "moderate",
                 "event_count": event_count,
-                "risks": [
-                    f"{event_count} earthquake declaration(s) since 2004",
-                    "Consider seismic design standards"
-                ],
+                "risks": [f"{event_count} earthquake declaration(s) since 2004"],
                 "mitigation_cost_per_unit": 6000
             }
     
@@ -1649,38 +2309,10 @@ Provide a market demand score (0-100) and brief analysis."""
         """Get recommendation based on overall disaster risk"""
         
         if overall_risk_level == "very_high":
-            return "CAUTION: Multiple high-risk natural hazards present. Conduct detailed feasibility study and cost-benefit analysis before proceeding."
+            return "CAUTION: Multiple high-risk natural hazards present. Conduct detailed feasibility study."
         elif overall_risk_level == "high":
-            return "High natural disaster risk. Ensure mitigation costs are included in pro forma and verify insurance availability."
+            return "High natural disaster risk. Ensure mitigation costs are included in pro forma."
         elif overall_risk_level == "moderate":
             return "Moderate risk level. Standard mitigation measures should be sufficient."
         else:
             return "Low natural disaster risk. Standard construction practices adequate."
-    
-    def _calculate_overall_score(
-        self,
-        location: float,
-        market: float,
-        financial: float,
-        partnership: float,
-        risk: float
-    ) -> float:
-        """Calculate weighted overall score"""
-        
-        weights = {
-            "location": 0.25,
-            "market": 0.25,
-            "financial": 0.20,
-            "partnership": 0.15,
-            "risk": 0.15
-        }
-        
-        overall = (
-            location * weights["location"] +
-            market * weights["market"] +
-            financial * weights["financial"] +
-            partnership * weights["partnership"] +
-            risk * weights["risk"]
-        )
-        
-        return round(overall, 1)

@@ -93,6 +93,10 @@ function transformFormDataToApiPayload(
       state: cleaned.property_state,
       zip_code: cleaned.property_zip_code,
 
+      // Multi-Address Support
+      demolish_all_structures: cleaned.demolish_all_structures,
+      additional_addresses: cleaned.additional_addresses,
+
       // Geospatial Data
       latitude: cleaned.latitude,
       longitude: cleaned.longitude,
@@ -101,11 +105,13 @@ function transformFormDataToApiPayload(
       lot_size_sqft: cleaned.lot_size_sqft,
       current_usage: cleaned.current_usage,
       zoning_description: cleaned.zoning_description,
+      market_value_estimate: cleaned.assessed_value, // Map form's 'assessed_value' to API's 'market_value_estimate'
     },
     assessment: {
       // Ownership
       owns_property_free_clear: cleaned.owns_property_free_clear,
       willing_to_ground_lease: cleaned.willing_to_ground_lease,
+      existing_debt_amount: cleaned.existing_debt_amount,
 
       // Congregation Approval
       congregation_voted: cleaned.congregation_voted,
@@ -128,6 +134,10 @@ function transformFormDataToApiPayload(
       // Available Build Space (NEW FIELDS)
       available_build_sqft: cleaned.available_build_sqft,
       build_area_notes: cleaned.build_area_notes,
+
+      // Property Improvement & Financing Needs
+      property_improvement_needs: cleaned.property_improvement_needs,
+      capital_financing_need: cleaned.capital_financing_need,
     },
   };
 }
@@ -263,14 +273,14 @@ export const useUpdateSubmissionStatus = () => {
 };
 
 /**
- * Admin-only: Generate investment report
- * GET /api/v1/reports/assessment/:id/pdf
+ * Admin-only: Generate investment report (V3)
+ * GET /api/v1/reports/assessment/:id/download-v2
  */
 export const useGenerateReport = () => {
   return useMutation({
     mutationFn: async (assessmentId: string) => {
       const { data } = await apiClient.get(
-        `/api/v1/reports/assessment/${assessmentId}/pdf`,
+        `/api/v1/reports/assessment/${assessmentId}/download-v2`,
         {
           responseType: 'blob',
         }

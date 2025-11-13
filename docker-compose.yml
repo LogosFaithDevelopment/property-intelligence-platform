@@ -25,6 +25,16 @@ services:
       - redis_data:/data
     command: redis-server --appendonly yes
 
+  adminer:
+    image: adminer:latest
+    ports:
+      - '8080:8080'
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+      ADMINER_DESIGN: dracula
+    depends_on:
+      - postgres
+
   backend:
     build:
       context: ./backend
@@ -49,13 +59,16 @@ services:
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev # Use development Dockerfile for local dev
     working_dir: /frontend
     ports:
       - '3000:3000'
     environment:
       # For client-side (browser) API calls
       NEXT_PUBLIC_API_URL: http://localhost:8000
+      # For server-side (Next.js API routes) calls to backend
+      BACKEND_URL: http://backend:8000
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZXhvdGljLW1pbmstNTAuY2xlcmsuYWNjb3VudHMuZGV2JA
       CHOKIDAR_USEPOLLING: 'true'
     volumes:
       - ./frontend:/frontend

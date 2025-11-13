@@ -256,6 +256,212 @@ export function Section3Ownership({ form }: Section3OwnershipProps) {
           </FormItem>
         )}
       />
+
+      {/* PHASE 2: DEAL BREAKER FIELDS */}
+      <div className='border-t pt-6 mt-6'>
+        <h3 className='text-lg font-semibold mb-4'>
+          Existing Debt & Obligations
+        </h3>
+
+        {/* Existing Debt Amount */}
+        <FormField
+          control={form.control}
+          name='existing_debt_amount'
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Existing Debt Amount (Optional)</FormLabel>
+              <FormControl>
+                <Input
+                  type='number'
+                  placeholder='e.g., 500000'
+                  {...field}
+                  value={
+                    field.value === undefined ||
+                    field.value === null ||
+                    isNaN(field.value)
+                      ? ''
+                      : String(field.value)
+                  }
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    field.onChange(val === '' ? undefined : Number(val));
+                  }}
+                />
+              </FormControl>
+              <FormDescription>
+                Total amount of existing debt on the property. Debt exceeding
+                20% of property value is a concern.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* Sanctuary Replacement Expectation */}
+        <FormField
+          control={form.control}
+          name='expects_sanctuary_replacement'
+          render={({ field }) => (
+            <FormItem className='mt-4'>
+              <FormLabel>
+                Does your church expect a sanctuary replacement?
+              </FormLabel>
+              <Select
+                onValueChange={(value) => field.onChange(value === 'true')}
+                value={
+                  field.value === undefined ? undefined : String(field.value)
+                }
+              >
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder='Select an option' />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value='true'>
+                    Yes - We expect a new sanctuary
+                  </SelectItem>
+                  <SelectItem value='false'>
+                    No - No sanctuary replacement needed
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <FormDescription>
+                Sanctuary replacement significantly increases project costs and
+                may impact feasibility
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* Sanctuary Replacement Cost Estimate (conditional) */}
+        {form.watch('expects_sanctuary_replacement') === true && (
+          <FormField
+            control={form.control}
+            name='sanctuary_replacement_cost_estimate'
+            render={({ field }) => (
+              <FormItem className='mt-4'>
+                <FormLabel>
+                  Estimated Sanctuary Replacement Cost (Optional)
+                </FormLabel>
+                <FormControl>
+                  <Input
+                    type='number'
+                    placeholder='e.g., 2000000'
+                    {...field}
+                    value={
+                      field.value === undefined ||
+                      field.value === null ||
+                      isNaN(field.value)
+                        ? ''
+                        : String(field.value)
+                    }
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      field.onChange(val === '' ? undefined : Number(val));
+                    }}
+                  />
+                </FormControl>
+                <FormDescription>
+                  If known, what is the estimated cost to build a replacement
+                  sanctuary?
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
+      </div>
+
+      {/* Property Improvement Needs */}
+      <div>
+        <h3 className='text-lg font-semibold mb-4'>
+          Property Improvement Needs
+        </h3>
+
+        <FormField
+          control={form.control}
+          name='property_improvement_needs'
+          render={() => (
+            <FormItem>
+              <FormLabel>Do you have any property improvement needs?</FormLabel>
+              <FormDescription>
+                Select all that apply. These won't affect your assessment score.
+              </FormDescription>
+              <div className='space-y-2 mt-3'>
+                {[
+                  { value: 'hvac', label: 'HVAC/AC System' },
+                  { value: 'roof', label: 'Roof' },
+                  { value: 'landscaping', label: 'Landscaping' },
+                  { value: 'painting', label: 'Painting' },
+                  { value: 'interior', label: 'Interior Improvements' },
+                  { value: 'other', label: 'Other' },
+                ].map((item) => (
+                  <FormField
+                    key={item.value}
+                    control={form.control}
+                    name='property_improvement_needs'
+                    render={({ field }) => {
+                      const currentValue = field.value || [];
+                      return (
+                        <FormItem
+                          key={item.value}
+                          className='flex flex-row items-start space-x-3 space-y-0'
+                        >
+                          <FormControl>
+                            <input
+                              type='checkbox'
+                              checked={currentValue.includes(item.value)}
+                              onChange={(checked) => {
+                                const newValue = checked.target.checked
+                                  ? [...currentValue, item.value]
+                                  : currentValue.filter(
+                                      (value: string) => value !== item.value
+                                    );
+                                field.onChange(newValue);
+                              }}
+                              className='h-4 w-4 rounded border-gray-300'
+                            />
+                          </FormControl>
+                          <FormLabel className='font-normal cursor-pointer'>
+                            {item.label}
+                          </FormLabel>
+                        </FormItem>
+                      );
+                    }}
+                  />
+                ))}
+              </div>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      </div>
+
+      {/* Capital/Financing Need */}
+      <FormField
+        control={form.control}
+        name='capital_financing_need'
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Do you have a capital or financing need?</FormLabel>
+            <FormControl>
+              <Input
+                placeholder='e.g., Need funds for roof repairs'
+                maxLength={100}
+                {...field}
+                value={field.value || ''}
+              />
+            </FormControl>
+            <FormDescription>
+              Optional. Describe any capital or financing needs (max 100
+              characters). This won't affect your assessment score.
+            </FormDescription>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
     </div>
   );
 }

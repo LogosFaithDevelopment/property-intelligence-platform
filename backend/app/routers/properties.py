@@ -4,8 +4,10 @@ CRUD operations for property management and data enrichment
 """
 
 import logging
+from datetime import datetime
 from typing import List, Optional
 
+from app.config import settings
 from app.database import get_db
 from app.middleware.auth import (CurrentUser, get_current_user,
                                  get_optional_user)
@@ -198,36 +200,100 @@ async def fetch_property_data_by_address(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Fetch property data from LA County Assessor API by address
+    Fetch property data by address - SMARTY PRIMARY, LA COUNTY FALLBACK
     Used for auto-filling form fields during property creation
     
-    Returns lot size, zoning, assessed value, etc.
+    Data Source Priority:
+    1. Smarty API (works for ALL property types including religious/commercial)
+    2. LA County Assessor (fallback for CA properties, residential only)
     
-    Edge Cases:
-    - Non-LA County addresses: Returns success=False with helpful message
-    - Property not found: Returns success=False, user enters manually
-    - API error: Returns success=False, graceful degradation
+    Returns lot size, zoning, assessed value, available build space, etc.
     """
     try:
-        from app.api_clients.la_county_assessor import LACountyAssessorClient
-        
         logger.info(f"Fetching property data for address: {address}, {city}, {state} {zip_code}")
         
-        # Check if address is in LA County (only works for LA County)
+        # ========================================
+        # STEP 1: TRY SMARTY API FIRST (BEST SOURCE)
+        # ========================================
+        if settings.smarty_auth_id and settings.smarty_auth_token:
+            try:
+                from app.api_providers.smarty_provider import SmartyProvider
+                
+                logger.info("🎯 Trying Smarty API (PRIMARY - works for all property types)")
+                
+                smarty_provider = SmartyProvider(
+                    auth_id=settings.smarty_auth_id,
+                    auth_token=settings.smarty_auth_token
+                )
+                
+                smarty_result = await smarty_provider.get_property_data(
+                    street=address,
+                    city=city,
+                    state=state,
+                    zipcode=zip_code
+                )
+                
+                await smarty_provider.close()
+                
+                if smarty_result.get('success'):
+                    lot_data = smarty_result.get('lot', {})
+                    building_data = smarty_result.get('building', {})
+                    available_build_space = smarty_result.get('available_build_space', {})
+                    valuation_data = smarty_result.get('valuation', {})
+                    property_type_data = smarty_result.get('property_type', {})
+                    
+                    logger.info(f"✅ Smarty API SUCCESS: {lot_data.get('size_sqft', 0):,} sqft lot, "
+                              f"{building_data.get('size_sqft', 0):,} sqft building, "
+                              f"{available_build_space.get('sqft', 0):,} sqft available, "
+                              f"zoning: {property_type_data.get('zoning', 'N/A')}")
+                    
+                    return {
+                        "success": True,
+                        "data": {
+                            "lot_size_sqft": lot_data.get('size_sqft'),
+                            "lot_size_acres": lot_data.get('size_acres'),
+                            "building_sqft": building_data.get('size_sqft'),
+                            "year_built": building_data.get('year_built'),
+                            "assessed_value": valuation_data.get('assessed_total'),
+                            "land_value": valuation_data.get('assessed_land'),
+                            "lot_numbers": lot_data.get('lot_numbers'),
+                            "parcel_number": lot_data.get('parcel_number'),
+                            "zoning": property_type_data.get('zoning', ''),
+                            "land_use": property_type_data.get('land_use', ''),
+                            "available_build_space_sqft": available_build_space.get('sqft'),
+                            "qualifies_for_logos": available_build_space.get('qualifies_for_logos', False),
+                            "data_source": "Smarty (Primary)",
+                            "latitude": None,  # Will be geocoded separately
+                            "longitude": None,
+                            "query_date": datetime.utcnow().isoformat()
+                        }
+                    }
+                else:
+                    logger.warning(f"Smarty API returned no data: {smarty_result.get('error')}")
+                    
+            except Exception as smarty_error:
+                logger.warning(f"Smarty API error: {smarty_error}, falling back to LA County")
+        else:
+            logger.info("Smarty API credentials not configured, using LA County fallback")
+        
+        # ========================================
+        # STEP 2: FALLBACK TO LA COUNTY (CA ONLY)
+        # ========================================
         if state and state.upper() not in ["CA", "CALIFORNIA"]:
-            logger.info(f"Address is in {state}, not California. LA County API not applicable.")
+            logger.info(f"Address is in {state}, not California. No data source available.")
             return {
                 "success": False,
-                "error": "not_la_county",
-                "message": "Property data auto-fill only available for Los Angeles County. Please enter property details manually.",
+                "error": "no_data_source",
+                "message": "Property data auto-fill not available for this location. Please enter property details manually.",
                 "data": None
             }
         
-        # Initialize LA County client
+        from app.api_clients.la_county_assessor import LACountyAssessorClient
+        
+        logger.info("🔄 Trying LA County Assessor API (FALLBACK)")
         la_client = LACountyAssessorClient()
         
         try:
-            # Fetch property data
             result = await la_client.get_property_by_address(
                 street_address=address,
                 city=city,
@@ -238,8 +304,12 @@ async def fetch_property_data_by_address(
                 error_msg = result.get("error", "Property not found")
                 logger.warning(f"LA County API returned no data: {error_msg}")
                 
-                # Determine if it's likely outside LA County or just not found
-                if city and city.lower() not in ["los angeles", "la", "pasadena", "glendale", "burbank", "torrance", "long beach", "santa monica", "pomona", "el monte", "inglewood", "downey", "norwalk", "west covina", "carson", "lancaster", "palmdale", "alhambra", "compton", "hawthorne"]:
+                # Check if likely outside LA County
+                if city and city.lower() not in ["los angeles", "la", "pasadena", "glendale", "burbank", 
+                                                  "torrance", "long beach", "santa monica", "pomona", 
+                                                  "el monte", "inglewood", "downey", "norwalk", 
+                                                  "west covina", "carson", "lancaster", "palmdale", 
+                                                  "alhambra", "compton", "hawthorne"]:
                     return {
                         "success": False,
                         "error": "not_la_county",
@@ -250,11 +320,12 @@ async def fetch_property_data_by_address(
                 return {
                     "success": False,
                     "error": "not_found",
-                    "message": "Property not found in LA County Assessor database. Please enter property details manually.",
+                    "message": "Property not found. Please enter property details manually.",
                     "data": None
                 }
             
-            # Extract and return relevant fields for form auto-fill
+            logger.info(f"✅ LA County API SUCCESS")
+            
             return {
                 "success": True,
                 "data": {
@@ -269,7 +340,7 @@ async def fetch_property_data_by_address(
                     "latitude": result.get("latitude"),
                     "longitude": result.get("longitude"),
                     "ain": result.get("ain"),
-                    "data_source": "LA County Assessor",
+                    "data_source": "LA County Assessor (Fallback)",
                     "query_date": result.get("query_date")
                 }
             }

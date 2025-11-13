@@ -1,0 +1,84 @@
+# The manifest for the "backend" service.
+# Read the full specification for the "Load Balanced Web Service" type at:
+#  https://aws.github.io/copilot-cli/docs/manifest/lb-web-service/
+
+# Your service name will be used in naming your resources like log groups, ECS services, etc.
+name: backend
+type: Load Balanced Web Service
+
+# Distribute traffic to your service.
+http:
+  # Requests to this path will be forwarded to your service.
+  # To match all requests you can use the "/" path.
+  path: '/'
+  # You can specify a custom health check path. The default is "/".
+  # Using "/" for simplest guaranteed 200 response (liveness probe)
+  healthcheck:
+    path: '/'
+    interval: 15s
+    timeout: 10s
+    healthy_threshold: 2
+    unhealthy_threshold: 3
+    grace_period: 60s
+  deregistration_delay: 5
+
+# Configuration for your containers and service.
+image:
+  # Docker build arguments. For additional overrides: https://aws.github.io/copilot-cli/docs/manifest/lb-web-service/#image-build
+  build: backend/Dockerfile
+  # Port exposed through your container to route traffic to it.
+  port: 8000
+
+cpu: 512 # Number of CPU units for the task.
+memory: 1024 # Amount of memory in MiB used by the task.
+count: 1 # Number of tasks that should be running in your service.
+exec: true # Enable running commands in your container.
+network:
+  connect: true # Enable Service Connect for intra-environment traffic between services.
+
+# storage:
+# readonly_fs: true       # Limit to read-only access to mounted root filesystems.
+
+# Environment variables (defaults, can be overridden per environment)
+variables:
+  ENVIRONMENT: production
+  LOG_LEVEL: INFO
+  DEBUG: 'false'
+
+# Override configurations per environment
+environments:
+  production:
+    variables:
+      ALLOWED_ORIGINS: https://logos.lotspecs.com
+      ALLOWED_HOSTS: '*'
+    secrets:
+      # Direct Secrets Manager ARNs for the secrets you just created
+      SECRET_KEY: 'arn:aws:secretsmanager:us-east-1:260150787661:secret:SECRET_KEY-EfOcuY'
+      CLERK_SECRET_KEY: 'arn:aws:secretsmanager:us-east-1:260150787661:secret:CLERK_SECRET_KEY-ieyI6a'
+      OPENAI_API_KEY: 'arn:aws:secretsmanager:us-east-1:260150787661:secret:OPENAI_API_KEY-kPhikE'
+      ATTOM_API_KEY: 'arn:aws:secretsmanager:us-east-1:260150787661:secret:ATTOM_API_KEY-GRCuHx'
+      SMARTY_AUTH_ID: 'arn:aws:secretsmanager:us-east-1:260150787661:secret:SMARTY_AUTH_ID-Xb4ik9'
+      SMARTY_AUTH_TOKEN: 'arn:aws:secretsmanager:us-east-1:260150787661:secret:SMARTY_AUTH_TOKEN-HOQ3mt'
+      HUD_API_KEY: 'arn:aws:secretsmanager:us-east-1:260150787661:secret:HUD_API_KEY-T8xoMQ'
+      GOOGLE_MAPS_API_KEY: 'arn:aws:secretsmanager:us-east-1:260150787661:secret:GOOGLE_MAPS_API_KEY-syqw7v'
+      DATABASE_URL: 'arn:aws:secretsmanager:us-east-1:260150787661:secret:property-assessment/database-GCbVjC'
+      REDIS_URL: 'arn:aws:secretsmanager:us-east-1:260150787661:secret:property-assessment/redis-bE6sIP'
+    exec_role_policy:
+      Version: '2012-10-17'
+      Statement:
+        - Sid: AllowSecretsManagerAccess
+          Effect: Allow
+          Action:
+            - 'secretsmanager:GetSecretValue'
+            - 'secretsmanager:DescribeSecret'
+          Resource:
+            - 'arn:aws:secretsmanager:us-east-1:260150787661:secret:SECRET_KEY-*'
+            - 'arn:aws:secretsmanager:us-east-1:260150787661:secret:CLERK_SECRET_KEY-*'
+            - 'arn:aws:secretsmanager:us-east-1:260150787661:secret:OPENAI_API_KEY-*'
+            - 'arn:aws:secretsmanager:us-east-1:260150787661:secret:ATTOM_API_KEY-*'
+            - 'arn:aws:secretsmanager:us-east-1:260150787661:secret:SMARTY_AUTH_ID-*'
+            - 'arn:aws:secretsmanager:us-east-1:260150787661:secret:SMARTY_AUTH_TOKEN-*'
+            - 'arn:aws:secretsmanager:us-east-1:260150787661:secret:HUD_API_KEY-*'
+            - 'arn:aws:secretsmanager:us-east-1:260150787661:secret:GOOGLE_MAPS_API_KEY-*'
+            - 'arn:aws:secretsmanager:us-east-1:260150787661:secret:property-assessment/database-*'
+            - 'arn:aws:secretsmanager:us-east-1:260150787661:secret:property-assessment/redis-*'

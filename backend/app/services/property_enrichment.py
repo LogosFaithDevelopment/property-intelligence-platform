@@ -86,15 +86,24 @@ class PropertyEnrichmentService:
         flood_task = asyncio.create_task(self._fetch_flood_risk(property_obj))
         hud_task = asyncio.create_task(self._fetch_hud_data(property_obj))
         
-        # Add property data fetch (ATTOM or LA County Assessor)
+        # Add property data fetch (Smarty PRIMARY, then ATTOM or LA County as fallback)
         property_data_task = None
-        if use_premium_apis and settings.attom_api_key:
-            # Use ATTOM for premium access
+        
+        # Try Smarty first if available (works for ALL property types including commercial/religious)
+        if settings.smarty_auth_id and settings.smarty_auth_token:
+            logger.info("Using Smarty API for property data (supports all property types)")
+            smarty_task = asyncio.create_task(self._fetch_smarty_data(property_obj))
+            property_data_task = smarty_task
+            tasks = [demographics_task, flood_task, hud_task, smarty_task]
+        elif use_premium_apis and settings.attom_api_key:
+            # Use ATTOM for premium access (residential only)
+            logger.info("Using ATTOM API for property data (residential properties)")
             attom_task = asyncio.create_task(self._fetch_attom_data(property_obj))
             property_data_task = attom_task
             tasks = [demographics_task, flood_task, hud_task, attom_task]
         elif property_obj.state == "CA" or property_obj.state == "California":
-            # Use LA County Assessor for California properties (free, better coverage)
+            # Use LA County Assessor for California properties (free, no lot size)
+            logger.info("Using LA County Assessor for property data (CA only, limited data)")
             la_county_task = asyncio.create_task(self._fetch_la_county_data(property_obj))
             property_data_task = la_county_task
             tasks = [demographics_task, flood_task, hud_task, la_county_task]
@@ -109,12 +118,22 @@ class PropertyEnrichmentService:
         enrichment_results["results"]["flood_risk"] = results[1] if not isinstance(results[1], Exception) else {"status": "error", "error": str(results[1])}
         enrichment_results["results"]["hud_data"] = results[2] if not isinstance(results[2], Exception) else {"status": "error", "error": str(results[2])}
         
-        # Handle property data (ATTOM or LA County)
+        # Handle property data (Smarty, ATTOM, or LA County)
         if property_data_task and len(results) > 3:
             property_data_result = results[3] if not isinstance(results[3], Exception) else {"status": "error", "error": str(results[3])}
             
             # Determine which source was used
-            if use_premium_apis and settings.attom_api_key:
+            if settings.smarty_auth_id and settings.smarty_auth_token:
+                enrichment_results["results"]["smarty_data"] = property_data_result
+                
+                # If Smarty failed, try fallback for CA properties
+                if (property_obj.state == "CA" or property_obj.state == "California") and \
+                   (property_data_result.get("status") == "error" or not property_data_result.get("success")):
+                    logger.info("Smarty data unavailable, trying LA County Assessor fallback")
+                    la_county_result = await self._fetch_la_county_data(property_obj)
+                    enrichment_results["results"]["la_county_data"] = la_county_result
+                    
+            elif use_premium_apis and settings.attom_api_key:
                 enrichment_results["results"]["attom_data"] = property_data_result
                 
                 # If ATTOM failed or has no data, try LA County as fallback for CA properties
@@ -1347,6 +1366,125 @@ class PropertyEnrichmentService:
             logger.error(f"Google Places API error: {str(e)}")
             return {"status": "error", "error": str(e)}
     
+    def _combine_multi_address_data(
+        self,
+        all_addresses_data: list,
+        demolish_all_structures: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Combine property data from multiple addresses
+        
+        Args:
+            all_addresses_data: List of Smarty API results for each address
+            demolish_all_structures: Whether user plans to demolish existing buildings
+            
+        Returns:
+            Combined property data with total lot sizes and calculated available space
+        """
+        if not all_addresses_data:
+            return None
+        
+        logger.info(f"Combining data from {len(all_addresses_data)} address(es)")
+        
+        # Initialize combined values
+        total_lot_sqft = 0
+        total_lot_acres = 0
+        total_building_sqft = 0
+        all_lot_numbers = []
+        all_parcel_numbers = []
+        individual_parcels = []  # NEW: Store individual parcel data
+        
+        # Aggregate data from all addresses
+        for idx, addr_data in enumerate(all_addresses_data):
+            if not addr_data.get('success'):
+                continue
+            
+            lot_data = addr_data.get('lot', {})
+            building_data = addr_data.get('building', {})
+            
+            # Sum lot sizes
+            lot_sqft = lot_data.get('size_sqft', 0)
+            lot_acres = lot_data.get('size_acres', 0)
+            total_lot_sqft += lot_sqft
+            total_lot_acres += lot_acres
+            
+            # Sum building sizes (only if NOT demolishing)
+            building_sqft = building_data.get('size_sqft', 0)
+            if not demolish_all_structures:
+                total_building_sqft += building_sqft
+            
+            # Collect lot/parcel numbers
+            lot_numbers = lot_data.get('lot_numbers', '')
+            if lot_numbers:
+                all_lot_numbers.append(lot_numbers)
+            
+            parcel_number = lot_data.get('parcel_number', '')
+            if parcel_number:
+                all_parcel_numbers.append(parcel_number)
+            
+            # NEW: Store individual parcel data for frontend display
+            individual_parcels.append({
+                'parcel_index': idx,
+                'lot': {
+                    'size_sqft': lot_sqft,
+                    'size_acres': lot_acres,
+                    'lot_numbers': lot_numbers,
+                    'parcel_number': parcel_number
+                },
+                'building': {
+                    'size_sqft': building_sqft,
+                    'year_built': building_data.get('year_built'),
+                    'stories': building_data.get('stories')
+                }
+            })
+            
+            logger.info(
+                f"Address #{idx + 1}: Lot={lot_sqft:,} sqft, Building={building_sqft:,} sqft, "
+                f"Lots={lot_numbers}, Parcel={parcel_number}"
+            )
+        
+        # Calculate available build space
+        available_build_space_sqft = total_lot_sqft - total_building_sqft
+        available_build_space_acres = available_build_space_sqft / 43560 if available_build_space_sqft > 0 else 0
+        qualifies_for_logos = available_build_space_sqft >= 10000
+        
+        # Use primary address data as base, but update with combined values
+        primary_data = all_addresses_data[0]
+        
+        logger.info(
+            f"✅ COMBINED TOTALS: Lot={total_lot_sqft:,} sqft ({total_lot_acres:.2f} acres), "
+            f"Building={total_building_sqft:,} sqft, Available={available_build_space_sqft:,} sqft - "
+            f"{'QUALIFIES' if qualifies_for_logos else 'Does not qualify'} for LOGOS"
+        )
+        
+        # Return combined data structure
+        return {
+            'success': True,
+            'lot': {
+                'size_sqft': total_lot_sqft,
+                'size_acres': total_lot_acres,
+                'lot_numbers': ', '.join(all_lot_numbers),
+                'parcel_number': ', '.join(all_parcel_numbers)
+            },
+            'building': primary_data.get('building', {}),  # Use primary building characteristics
+            'available_build_space': {
+                'sqft': available_build_space_sqft,
+                'acres': round(available_build_space_acres, 4),
+                'qualifies_for_logos': qualifies_for_logos,
+                'minimum_required': 10000,
+                'calculation': f"{total_lot_sqft:,} sqft (total lot) - {total_building_sqft:,} sqft (buildings) = {available_build_space_sqft:,} sqft",
+                'demolish_all_structures': demolish_all_structures,
+                'address_count': len(all_addresses_data)
+            },
+            'valuation': primary_data.get('valuation', {}),
+            'financial': primary_data.get('financial', {}),
+            'owner': primary_data.get('owner', {}),
+            'property_type': primary_data.get('property_type', {}),
+            'combined_lot_size_sqft': total_lot_sqft,
+            'combined_building_size_sqft': total_building_sqft,
+            'individual_parcels': individual_parcels  # NEW: Include individual parcel data
+        }
+    
     async def _update_property_with_enriched_data(
         self,
         property_obj: Property,
@@ -1413,5 +1551,277 @@ class PropertyEnrichmentService:
                 property_obj.assessed_value = valuation["total_assessed_value"]
                 logger.info(f"Updated assessed_value from LA County: ${valuation['total_assessed_value']:,}")
         
+        # Smarty data - PRIORITY SOURCE for lot size (works for all property types)
+        smarty_data = enrichment_results["results"].get("smarty_data", {}).get("data", {})
+        if smarty_data:
+            lot_info = smarty_data.get("lot", {})
+            building_info = smarty_data.get("building", {})
+            multi_address_info = smarty_data.get("multi_address", {})
+            address_info = smarty_data.get("address", {})
+            valuation_info = smarty_data.get("valuation", {})
+            
+            # Update lot size (always update from Smarty - most accurate)
+            if lot_info.get("size_sqft"):
+                property_obj.lot_size_sqft = lot_info["size_sqft"]
+                property_obj.lot_size_acres = lot_info.get("size_acres", lot_info["size_sqft"] / 43560)
+                logger.info(f"Updated lot_size from Smarty: {lot_info['size_sqft']:,} sqft ({property_obj.lot_size_acres:.2f} acres)")
+            
+            # Update building size and year_built
+            if building_info.get("size_sqft"):
+                property_obj.building_sqft = building_info["size_sqft"]
+                logger.info(f"Updated building_sqft from Smarty: {building_info['size_sqft']:,} sqft")
+            
+            if building_info.get("year_built") and not property_obj.year_built:
+                # Convert to int (Smarty returns string)
+                property_obj.year_built = int(building_info["year_built"])
+                logger.info(f"Updated year_built from Smarty: {building_info['year_built']}")
+            
+            # Update county from Smarty address data
+            if address_info.get("county") and not property_obj.county:
+                property_obj.county = address_info["county"]
+                logger.info(f"Updated county from Smarty: {address_info['county']}")
+            
+            # Update assessed value from Smarty valuation
+            if valuation_info.get("assessed_total") and not property_obj.assessed_value:
+                property_obj.assessed_value = valuation_info["assessed_total"]
+                logger.info(f"Updated assessed_value from Smarty: ${valuation_info['assessed_total']:,}")
+            
+            # Update combined lot/building sizes (for multi-address properties)
+            if multi_address_info.get("combined_lot_size_sqft"):
+                property_obj.combined_lot_size_sqft = multi_address_info["combined_lot_size_sqft"]
+                logger.info(f"Stored combined_lot_size_sqft: {multi_address_info['combined_lot_size_sqft']:,} sqft")
+            
+            if multi_address_info.get("combined_building_size_sqft"):
+                property_obj.combined_building_size_sqft = multi_address_info["combined_building_size_sqft"]
+                logger.info(f"Stored combined_building_size_sqft: {multi_address_info['combined_building_size_sqft']:,} sqft")
+        
         await self.db.commit()
         logger.info(f"Updated property {property_obj.id} with enriched data")
+    
+    async def _fetch_smarty_data(self, property_obj: Property) -> Dict[str, Any]:
+        """
+        Fetch property data from Smarty API
+        
+        PRIMARY PROPERTY DATA SOURCE - Works for ALL property types:
+        - ✅ Residential properties
+        - ✅ Commercial properties
+        - ✅ Religious properties (churches, temples, etc.)
+        - ✅ Industrial properties
+        
+        Provides comprehensive data:
+        - Lot size (acres, sqft) - CRITICAL for LOGOS 10k sqft minimum
+        - Building characteristics (size, year built, construction)
+        - Available build space calculation (lot - building = available)
+        - Parcel/lot numbers (APN)
+        - Property valuations (assessed + estimated market value)
+        - Financial history (mortgages when available)
+        - Owner information
+        
+        This is the BEST source for lot size data on commercial/religious properties.
+        
+        NEW: Supports multi-address properties - fetches data for primary + additional addresses
+        and combines lot sizes for accurate unit calculations.
+        """
+        
+        if not settings.smarty_auth_id or not settings.smarty_auth_token:
+            logger.warning("Smarty API credentials not configured, skipping Smarty data fetch")
+            return {
+                "status": "skipped",
+                "reason": "Smarty API credentials not configured",
+                "success": False,
+                "data": {}
+            }
+        
+        try:
+            from app.api_providers.smarty_provider import SmartyProvider
+
+            # Initialize Smarty provider
+            smarty_provider = SmartyProvider(
+                auth_id=settings.smarty_auth_id,
+                auth_token=settings.smarty_auth_token
+            )
+            
+            # Fetch PRIMARY address
+            logger.info(f"Fetching Smarty property data for PRIMARY address: {property_obj.full_address}")
+            
+            result = await smarty_provider.get_property_data(
+                street=property_obj.street_address,
+                city=property_obj.city,
+                state=property_obj.state,
+                zipcode=property_obj.zip_code
+            )
+            
+            if not result.get('success'):
+                logger.warning(f"Smarty API returned no data for primary address: {result.get('error')}")
+                await smarty_provider.close()
+                return {
+                    "status": "error",
+                    "error": result.get('error', 'Unknown error'),
+                    "success": False,
+                    "data": {}
+                }
+            
+            # Store primary address data
+            all_addresses_data = [result]
+            
+            # Fetch ADDITIONAL addresses if they exist
+            additional_addresses = property_obj.additional_addresses or []
+            if additional_addresses and isinstance(additional_addresses, list):
+                logger.info(f"Found {len(additional_addresses)} additional address(es) to fetch")
+                
+                for idx, addr in enumerate(additional_addresses):
+                    try:
+                        logger.info(f"Fetching Smarty data for additional address #{idx + 1}: {addr.get('address')}")
+                        
+                        additional_result = await smarty_provider.get_property_data(
+                            street=addr.get('address', ''),
+                            city=addr.get('city', ''),
+                            state=addr.get('state', ''),
+                            zipcode=addr.get('zip_code', '')
+                        )
+                        
+                        if additional_result.get('success'):
+                            all_addresses_data.append(additional_result)
+                            logger.info(f"✅ Successfully fetched data for additional address #{idx + 1}")
+                        else:
+                            logger.warning(f"Failed to fetch data for additional address #{idx + 1}: {additional_result.get('error')}")
+                    except Exception as e:
+                        logger.error(f"Error fetching additional address #{idx + 1}: {str(e)}")
+            
+            # Close provider
+            await smarty_provider.close()
+            
+            # Combine data from all addresses
+            combined_data = self._combine_multi_address_data(all_addresses_data, property_obj.demolish_all_structures)
+            
+            # NEW: Enrich additional_addresses with individual parcel data
+            if additional_addresses and len(all_addresses_data) > 1:
+                logger.info(f"Enriching {len(additional_addresses)} additional address(es) with parcel data")
+                for idx, addr in enumerate(additional_addresses):
+                    # Skip primary (index 0), start from index 1
+                    addr_data_index = idx + 1
+                    if addr_data_index < len(all_addresses_data):
+                        addr_smarty_data = all_addresses_data[addr_data_index]
+                        if addr_smarty_data.get('success'):
+                            # Add enriched_data to the address
+                            addr['enriched_data'] = {
+                                'lot': addr_smarty_data.get('lot', {}),
+                                'building': addr_smarty_data.get('building', {}),
+                                'owner': addr_smarty_data.get('owner', {}),
+                                'valuation': addr_smarty_data.get('valuation', {})
+                            }
+                            logger.info(f"✅ Enriched address #{idx + 1} with Smarty data: {addr.get('address')}")
+                
+                # Mark additional_addresses as modified so SQLAlchemy saves it
+                from sqlalchemy.orm.attributes import flag_modified
+                flag_modified(property_obj, 'additional_addresses')
+                logger.info("✅ Marked additional_addresses as modified for database update")
+            
+            if not combined_data:
+                logger.warning("Failed to combine multi-address data")
+                return {
+                    "status": "error",
+                    "error": "Failed to combine multi-address data",
+                    "success": False,
+                    "data": {}
+                }
+            
+            # Extract key data for easy access and database storage (using COMBINED data)
+            lot_data = combined_data.get('lot', {})
+            building_data = combined_data.get('building', {})
+            available_build_space = combined_data.get('available_build_space', {})
+            valuation_data = combined_data.get('valuation', {})
+            financial_data = combined_data.get('financial', {})
+            owner_data = combined_data.get('owner', {})
+            
+            smarty_summary = {
+                # Lot information (THE CRITICAL DATA!)
+                "lot": {
+                    "size_sqft": lot_data.get('size_sqft', 0),
+                    "size_acres": lot_data.get('size_acres', 0),
+                    "lot_numbers": lot_data.get('lot_numbers', ''),
+                    "parcel_number": lot_data.get('parcel_number', '')
+                },
+                
+                # Building information
+                "building": {
+                    "size_sqft": building_data.get('size_sqft', 0),
+                    "year_built": building_data.get('year_built'),
+                    "stories": building_data.get('stories'),
+                    "construction_type": building_data.get('construction_type', ''),
+                    "floor_1_sqft": building_data.get('1st_floor_sqft', 0),
+                    "floor_2_sqft": building_data.get('2nd_floor_sqft', 0)
+                },
+                
+                # 🎯 AVAILABLE BUILD SPACE - THE MONEY NUMBER!
+                "available_build_space": {
+                    "sqft": available_build_space.get('sqft', 0),
+                    "acres": available_build_space.get('acres', 0),
+                    "qualifies_for_logos": available_build_space.get('qualifies_for_logos', False),
+                    "minimum_required": available_build_space.get('minimum_required', 10000),
+                    "calculation": available_build_space.get('calculation', '')
+                },
+                
+                # Property valuation
+                "valuation": {
+                    "assessed_total": valuation_data.get('assessed_total', 0),
+                    "assessed_land": valuation_data.get('assessed_land', 0),
+                    "assessed_improvement": valuation_data.get('assessed_improvement', 0),
+                    "estimated_market_min": valuation_data.get('estimated_market_min', 0),
+                    "estimated_market_max": valuation_data.get('estimated_market_max', 0),
+                    "assessed_year": valuation_data.get('assessed_year', '')
+                },
+                
+                # Financial history (mortgages)
+                "financial": {
+                    "has_mortgages": financial_data.get('has_mortgages', False),
+                    "total_mortgage_amount": financial_data.get('total_mortgage_amount', 0),
+                    "mortgage_count": financial_data.get('mortgage_count', 0),
+                    "mortgages": financial_data.get('mortgages', [])
+                },
+                
+                # Owner information
+                "owner": {
+                    "name": owner_data.get('name', ''),
+                    "last_sale_date": owner_data.get('last_sale_date', ''),
+                    "last_sale_price": owner_data.get('last_sale_price', 0)
+                },
+                
+                # Property type
+                "property_type": combined_data.get('property_type', {}),
+                
+                # Multi-address information
+                "multi_address": {
+                    "address_count": len(all_addresses_data),
+                    "demolish_all_structures": property_obj.demolish_all_structures,
+                    "combined_lot_size_sqft": combined_data.get('combined_lot_size_sqft', 0),
+                    "combined_building_size_sqft": combined_data.get('combined_building_size_sqft', 0),
+                    "individual_parcels": combined_data.get('individual_parcels', [])  # NEW: Individual parcel data
+                }
+            }
+            
+            logger.info(
+                f"✅ Smarty data retrieved ({len(all_addresses_data)} address(es)): "
+                f"{lot_data.get('size_sqft', 0):,} sqft lot, "
+                f"{building_data.get('size_sqft', 0):,} sqft building, "
+                f"{available_build_space.get('sqft', 0):,} sqft available - "
+                f"{'QUALIFIES' if available_build_space.get('qualifies_for_logos') else 'Does not qualify'} for LOGOS"
+            )
+            
+            return {
+                "status": "success",
+                "source": "smarty",
+                "success": True,
+                "data": smarty_summary,
+                "raw_result": combined_data,
+                "address_count": len(all_addresses_data)
+            }
+            
+        except Exception as e:
+            logger.error(f"Error fetching Smarty data: {str(e)}")
+            return {
+                "status": "error",
+                "error": str(e),
+                "success": False,
+                "data": {}
+            }

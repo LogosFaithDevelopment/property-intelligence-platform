@@ -296,3 +296,16 @@ Dockerfile
 uploads/
 temp/
 tmp/
+
+# Backup files (editor backups)
+*.bak
+*.backup
+
+# Local testing/debugging scripts
+test_pdf_gen.py
+trigger_assessment_*.py
+fix_alembic.py
+local_schema.sql
+
+# Frontend script with hardcoded path
+frontend/scripts/cleanup-console-logs.sh

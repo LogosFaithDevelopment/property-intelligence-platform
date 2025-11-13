@@ -78,7 +78,9 @@ async def create_assessment(
             affordability_target=assessment_data.get("affordability_target"),
             revenue_sharing_preference=assessment_data.get("revenue_sharing_preference"),
             development_involvement_level=assessment_data.get("development_involvement_level"),
-            special_requirements=assessment_data.get("special_requirements")
+            special_requirements=assessment_data.get("special_requirements"),
+            property_improvement_needs=assessment_data.get("property_improvement_needs"),
+            capital_financing_need=assessment_data.get("capital_financing_need")
         )
         
         db.add(assessment)
