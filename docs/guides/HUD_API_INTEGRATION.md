@@ -374,7 +374,7 @@ curl -X POST http://localhost:8000/api/v1/assessments/1/process \
 
 ### Environment Variable
 ```bash
-HUD_API_KEY=eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9...
+HUD_API_KEY=
 ```
 
 ### Rate Limits
