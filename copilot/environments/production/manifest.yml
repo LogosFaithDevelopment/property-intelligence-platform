@@ -16,9 +16,10 @@ network:
         - id: subnet-018102d55cc9118e6
 
 # Configure the load balancers in your environment, once created.
-# http:
-#   public:
-#   private:
+http:
+  public:
+    certificates:
+      - arn:aws:acm:us-east-1:260150787661:certificate/4521e016-8392-472b-8eeb-36c8656a9bbc
 
 # Configure observability for your environment resources.
 observability:
