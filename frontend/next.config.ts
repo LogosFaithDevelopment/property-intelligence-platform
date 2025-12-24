@@ -27,13 +27,13 @@ const nextConfig: NextConfig = {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self';",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.dev https://*.accounts.dev https://clerk.logos.lotspecs.com https://challenges.cloudflare.com;",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.dev https://*.accounts.dev https://*.logosfaithdevelopment.com https://challenges.cloudflare.com;",
               "worker-src 'self' blob:;",
               'connect-src *;',
               'img-src * blob: data:;',
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;",
               "font-src 'self' https://fonts.gstatic.com;",
-              'frame-src https://*.clerk.dev https://*.accounts.dev https://accounts.logos.lotspecs.com https://challenges.cloudflare.com;',
+              'frame-src https://*.clerk.dev https://*.accounts.dev https://*.logosfaithdevelopment.com https://challenges.cloudflare.com;',
             ].join(' '),
           },
           // Prevent clickjacking attacks
