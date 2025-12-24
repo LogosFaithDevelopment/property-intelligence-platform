@@ -11,6 +11,7 @@ http:
   # Requests to this path will be forwarded to your service.
   # To match all requests you can use the "/" path.
   path: '/'
+  alias: app.logosfaithdevelopment.com
   # You can specify a custom health check path. The default is "/".
   healthcheck:
     path: '/api/health'
@@ -24,11 +25,15 @@ http:
 # Configuration for your containers and service.
 image:
   # Docker build arguments. For additional overrides: https://aws.github.io/copilot-cli/docs/manifest/lb-web-service/#image-build
+  # NOTE: NEXT_PUBLIC_* variables must be provided at BUILD time (not runtime) because Next.js
+  # bakes them into the JavaScript bundle. The publishable key below is SAFE to commit - it's
+  # designed to be public and exposed in client-side code. The actual secret (CLERK_SECRET_KEY)
+  # is properly referenced via ARN in the secrets: section below.
   build:
     dockerfile: frontend/Dockerfile
     args:
-      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_live_Y2xlcmsubG9nb3MubG90c3BlY3MuY29tJA
-      NEXT_PUBLIC_API_URL: https://api.logos.lotspecs.com
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_live_Y2xlcmsubG9nb3NmYWl0aGRldmVsb3BtZW50LmNvbSQ
+      NEXT_PUBLIC_API_URL: https://api.logosfaithdevelopment.com
       NEXT_PUBLIC_ENVIRONMENT: production
   # Port exposed through your container to route traffic to it.
   port: 3000
@@ -46,10 +51,45 @@ network:
 # Environment variables
 variables:
   NEXT_PUBLIC_ENVIRONMENT: production
-  BACKEND_URL: https://api.logos.lotspecs.com
+  BACKEND_URL: https://api.logosfaithdevelopment.com
 
 # You can override any of the values defined above by environment.
 environments:
+  dev:
+    image:
+      build:
+        args:
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_live_Y2xlcmsuZGV2LmxvZ29zZmFpdGhkZXZlbG9wbWVudC5jb20k
+          NEXT_PUBLIC_API_URL: https://api-dev.logosfaithdevelopment.com
+          NEXT_PUBLIC_ENVIRONMENT: development
+    http:
+      alias: dev.logosfaithdevelopment.com
+    variables:
+      NEXT_PUBLIC_ENVIRONMENT: development
+      BACKEND_URL: 'https://api-dev.logosfaithdevelopment.com'
+    secrets:
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: 'arn:aws:secretsmanager:us-east-1:260150787661:secret:NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY_dev-eDKb30'
+      NEXT_PUBLIC_API_URL: 'arn:aws:secretsmanager:us-east-1:260150787661:secret:NEXT_PUBLIC_API_URL_dev-IOL4WX'
+      CLERK_SECRET_KEY: 'arn:aws:secretsmanager:us-east-1:260150787661:secret:CLERK_SECRET_KEY_dev-V1bo4A'
+      NEXT_PUBLIC_CLERK_SIGN_IN_URL: 'arn:aws:secretsmanager:us-east-1:260150787661:secret:NEXT_PUBLIC_CLERK_SIGN_IN_URL_dev-uJKnaF'
+      NEXT_PUBLIC_CLERK_SIGN_UP_URL: 'arn:aws:secretsmanager:us-east-1:260150787661:secret:NEXT_PUBLIC_CLERK_SIGN_UP_URL_dev-kCPwRR'
+      NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL: 'arn:aws:secretsmanager:us-east-1:260150787661:secret:NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL_dev-34WDII'
+      NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL: 'arn:aws:secretsmanager:us-east-1:260150787661:secret:NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL_dev-IpTWCQ'
+    exec_role_policy:
+      Version: '2012-10-17'
+      Statement:
+        - Effect: Allow
+          Action:
+            - secretsmanager:GetSecretValue
+            - secretsmanager:DescribeSecret
+          Resource:
+            - 'arn:aws:secretsmanager:us-east-1:260150787661:secret:NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY_dev-*'
+            - 'arn:aws:secretsmanager:us-east-1:260150787661:secret:NEXT_PUBLIC_API_URL_dev-*'
+            - 'arn:aws:secretsmanager:us-east-1:260150787661:secret:CLERK_SECRET_KEY_dev-*'
+            - 'arn:aws:secretsmanager:us-east-1:260150787661:secret:NEXT_PUBLIC_CLERK_SIGN_IN_URL_dev-*'
+            - 'arn:aws:secretsmanager:us-east-1:260150787661:secret:NEXT_PUBLIC_CLERK_SIGN_UP_URL_dev-*'
+            - 'arn:aws:secretsmanager:us-east-1:260150787661:secret:NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL_dev-*'
+            - 'arn:aws:secretsmanager:us-east-1:260150787661:secret:NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL_dev-*'
   production:
     secrets:
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: 'arn:aws:secretsmanager:us-east-1:260150787661:secret:NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY-Vk07kT'
