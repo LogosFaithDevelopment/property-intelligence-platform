@@ -5,11 +5,45 @@
 **Version:** 3.0 (Multi-Scenario Development Update)  
 **Status:** ✅ CURRENT IMPLEMENTATION UNIT MIX OPTIONAL
 
+> **TL;DR (November 2025):** The assessment engine ingests property, HUD rent, and construction cost data, then models 3-, 4-, and 5-story scenarios using a 20% equity investment, construction financing up to 80%, and a permanent refinance sized at 65% Loan-to-Value (LTV) with a 7-year hold. Net Operating Income (NOI) is projected with a 30% expense ratio and 3% annual rent growth, producing typical levered IRRs between 11% and 18% under October 2025 costs. Recommendation logic automatically surfaces the scenario with the highest IRR that also maintains a Debt Service Coverage Ratio (DSCR) target of at least 1.15 when feasible.
+
 ---
 
 ## EXECUTIVE SUMMARY
 
 This document outlines the **current IRR calculation methodology** used in the LOGOS Property Intelligence Platform as of October 2025. **Version 3.0** introduces multi-scenario development modeling, tiered cost structures, and refined financial assumptions based on comprehensive market analysis.
+
+> ### Summary (Updated November 2025)
+>
+> **Logos IRR Methodology – Director Review**
+>
+> **Inputs**
+>
+> - Buildable area: 25,000 sq ft (example), scenarios modeled at 3/4/5 stories (115/153/191 units)
+> - Unit mix: 10% Studio / 80% 1BR / 10% 2BR (adjustable per project)
+> - Construction costs: $275K / $325K / $415K per unit (Oct 2025 update)
+
+- Capital stack: 20% equity, construction financing up to 80%, permanent refinance sized at 65% Loan-to-Value (LTV) @ 5.5%
+  > - Operating expense ratio: 30% of revenue, HUD FMR rents, no appreciation
+  > - Exit: Year 7, 6.0% cap, 4% sale costs, DSCR and sensitivity tracked
+  >
+  > **Outputs (4-story example)**
+  >
+  > - Development cost: $49.7M; equity $9.95M; debt $39.8M
+- Stabilized Net Operating Income (NOI): $2.35M; Debt Service Coverage Ratio (DSCR): 1.05×; annual cash flow ≈ $119K
+  > - Exit value: $39.2M; net proceeds after payoff: ≈ $15.8M
+  > - Levered IRR: 12.4%; sensitivities show ±10% cost or ±50 bps cap impacts
+  >
+  > **Recommendation logic**
+  >
+  > - All height scenarios run; choose highest IRR with DSCR target ≥1.15 when feasible
+  > - Example: 3-story (lower cost) outperforms higher density when per-unit cost savings outweigh added revenue
+  > - Scoring overlay (0-100) boosts projects with efficient costs, strong IRR, adequate lot size, reliable utilities; penalizes high leverage or sanctuary replacement needs
+  >
+  > **What’s adjustable**
+  >
+  > - Unit mix, expense ratio, equity %, rent growth, exit cap, hold period, tax incentives
+  > - Current model excludes LIHTC, welfare exemptions, or rent escalations (conservative stance)
 
 ### Key Model Parameters
 
