@@ -18,6 +18,7 @@ class BaseSchema(BaseModel):
         validate_assignment=True,
         arbitrary_types_allowed=True,
         str_strip_whitespace=True,
+        use_enum_values=True,  # Use enum values instead of names
     )
 
 

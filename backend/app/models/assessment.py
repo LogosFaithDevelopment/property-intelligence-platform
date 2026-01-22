@@ -31,6 +31,21 @@ class AssessmentPriority(str, enum.Enum):
     URGENT = "urgent"
 
 
+class PartnershipStructure(str, enum.Enum):
+    """Partnership structure preferences"""
+    GROUND_LEASE = "ground_lease"
+    LIMITED_PARTNERSHIP = "limited_partnership"
+    FEE_DEVELOPMENT = "fee_development"
+    UNSURE = "unsure"
+
+
+class TimelinePreferenceNew(str, enum.Enum):
+    """Timeline preference for project"""
+    ZERO_TO_SIX_MONTHS = "0_6_months"
+    SIX_TO_TWELVE_MONTHS = "6_12_months"
+    TWELVE_PLUS_MONTHS = "12_plus_months"
+
+
 class Assessment(BaseModel, UUIDMixin):
     """Property assessment and evaluation results"""
     
@@ -65,11 +80,22 @@ class Assessment(BaseModel, UUIDMixin):
     # Parking Requirements
     current_parking_spaces = Column(Integer, nullable=True)  # Current number of parking spaces
     parking_spaces_needed_after = Column(Integer, nullable=True)  # Parking needed after development
+    sunday_parking_needed = Column(Integer, nullable=True)  # NEW: Parking needed on Sunday
+    
+    # Property Debt & Restrictions (NEW)
+    has_property_debt = Column(Boolean, nullable=True)  # Does property have debt?
+    property_debt_amount = Column(Float, nullable=True)  # Amount if yes
+    property_debt_terms = Column(Text, nullable=True)  # Terms/description if yes
+    has_transfer_restrictions = Column(Boolean, nullable=True)  # Transfer/lease restrictions?
+    transfer_restrictions_description = Column(Text, nullable=True)  # Description if yes
+    has_long_term_leases = Column(Boolean, nullable=True)  # Existing leases/commitments?
+    long_term_leases_description = Column(Text, nullable=True)  # Description if yes
     
     # Development Preferences
     preferred_unit_count = Column(Integer, nullable=True)
     preferred_unit_types = Column(Text, nullable=True)  # JSON: ["studio", "1br", "2br"]
     affordability_target = Column(String(50), nullable=True)  # "30_ami", "60_ami", "80_ami"
+    project_components_wanted = Column(JSON, nullable=True)  # NEW: Array of wanted components (housing, sanctuary, fellowship hall, etc.)
     
     # Available Space for Development (Client-Provided)
     available_build_sqft = Column(Float, nullable=True)  # Square footage available for housing development
@@ -98,6 +124,13 @@ class Assessment(BaseModel, UUIDMixin):
     decision_timeline = Column(String(50), nullable=True)  # "immediate", "1-3_months", "3-6_months", "6-12_months", "unsure"
     accepts_60_40_ownership = Column(Boolean, nullable=True)  # Willing to accept 60% LOGOS / 40% Church split
     willing_to_pay_deposit = Column(Boolean, nullable=True)  # Willing to pay $5K refundable deposit
+    
+    # NEW: Enhanced Partnership & Timeline Fields
+    partnership_structure_preferences = Column(JSON, nullable=True)  # Array of PartnershipStructure values
+    decision_making_structure = Column(JSON, nullable=True)  # Array: ["pastor", "board", "trustees", "congregation"]
+    timeline_preference_new = Column(Enum(TimelinePreferenceNew, native_enum=True, values_callable=lambda x: [e.value for e in x]), nullable=True)  # Structured timeline preference
+    reinvestment_preference = Column(String(50), nullable=True)  # "yes", "maybe", "unsure"
+    priority_ranking = Column(JSON, nullable=True)  # Ordered array of project components by priority
     
     # AI Scoring Results (0-100 scale)
     overall_score = Column(Float, nullable=True)

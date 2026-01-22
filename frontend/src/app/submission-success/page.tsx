@@ -1,8 +1,17 @@
+'use client';
+
 import Link from 'next/link';
 import { CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useClerk } from '@clerk/nextjs';
 
 export default function SubmissionSuccessPage() {
+  const { signOut } = useClerk();
+
+  const handleReturnHome = async () => {
+    await signOut({ redirectUrl: '/' });
+  };
+
   return (
     <div className='flex min-h-screen items-center justify-center bg-gradient-to-br from-green-50 to-blue-50 px-4 py-12'>
       <div className='mx-auto max-w-2xl text-center'>
@@ -20,8 +29,7 @@ export default function SubmissionSuccessPage() {
 
         {/* Description */}
         <p className='mb-6 text-lg text-gray-600'>
-          We've received your submission and our team will
-          respond within 24 to 48 hours.
+          We've received your submission and our team will review it shortly.
         </p>
 
         {/* What Happens Next */}
@@ -35,8 +43,8 @@ export default function SubmissionSuccessPage() {
                 1
               </span>
               <span>
-                <strong>Confirmation Email:</strong> You&apos;ll receive an email
-                in a few minutes.
+                <strong>Confirmation: </strong> Someone from our team will reach
+                out to you.
               </span>
             </li>
             <li className='flex items-start'>
@@ -44,7 +52,8 @@ export default function SubmissionSuccessPage() {
                 2
               </span>
               <span>
-                <strong>Property Analysis:</strong> Our team will complete a thorough analysis.
+                <strong>Property Analysis:</strong> Our team will complete a
+                thorough analysis.
               </span>
             </li>
             {/* <li className='flex items-start'>
@@ -71,11 +80,11 @@ export default function SubmissionSuccessPage() {
 
         {/* Action Buttons */}
         <div className='flex flex-col gap-3 sm:flex-row sm:justify-center'>
-          <Button asChild size='lg'>
+          {/* <Button asChild size='lg'>
             <Link href='/submission-status'>Check Submission Status</Link>
-          </Button>
-          <Button asChild variant='outline' size='lg'>
-            <Link href='/'>Return to Home</Link>
+          </Button> */}
+          <Button variant='outline' size='lg' onClick={handleReturnHome}>
+            Return to Home
           </Button>
         </div>
 
@@ -86,7 +95,7 @@ export default function SubmissionSuccessPage() {
             href='mailto:partnerships@logos.org'
             className='font-medium text-blue-600 hover:underline'
           >
-            partnerships@logos.org
+            info@logosfaithdev.com
           </a>
         </p>
       </div>

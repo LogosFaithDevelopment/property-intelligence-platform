@@ -67,6 +67,14 @@ interface SubmissionDetail {
   church_congregation_size: number | null;
   church_annual_budget: number | null;
 
+  // NEW: Enhanced Church Fields
+  church_denominational_affiliation: string | null;
+  church_member_count: number | null;
+  church_building_condition: string | null;
+  church_site_condition_issues: string[] | null;
+  church_exploration_reasons: string[] | null;
+  church_ministries_using_property: string | null;
+
   // Property data
   property_id: number;
   property_street_address: string | null;
@@ -95,6 +103,21 @@ interface SubmissionDetail {
   special_requirements: string | null;
   property_improvement_needs: string[] | null; // Array of improvement needs
   capital_financing_need: string | null;
+
+  // NEW: Enhanced Assessment Fields
+  has_property_debt: boolean | null;
+  property_debt_amount: number | null;
+  property_debt_terms: string | null;
+  has_transfer_restrictions: boolean | null;
+  transfer_restrictions_description: string | null;
+  has_long_term_leases: boolean | null;
+  long_term_leases_description: string | null;
+  project_components_wanted: string[] | null;
+  sunday_parking_needed: number | null;
+  partnership_structure_preferences: string[] | null;
+  decision_making_structure: string[] | null;
+  timeline_preference_new: string | null;
+  reinvestment_preference: string | null;
 
   // Assessment data (enriched)
   financial_projections: any | null;
@@ -131,7 +154,7 @@ export default function AdminSubmissionDetailPage({
           headers: {
             Authorization: `Bearer ${token}`,
           },
-        }
+        },
       );
 
       if (!response.ok) {
@@ -155,7 +178,7 @@ export default function AdminSubmissionDetailPage({
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({ notes }),
-        }
+        },
       );
       if (!response.ok) throw new Error('Failed to approve submission');
       return response.json();
@@ -186,7 +209,7 @@ export default function AdminSubmissionDetailPage({
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({ reason: rejectReason, notes }),
-        }
+        },
       );
       if (!response.ok) throw new Error('Failed to reject submission');
       return response.json();
@@ -218,7 +241,7 @@ export default function AdminSubmissionDetailPage({
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({ comment }),
-        }
+        },
       );
       if (!response.ok) throw new Error('Failed to add comment');
       return response.json();
@@ -360,7 +383,7 @@ export default function AdminSubmissionDetailPage({
                   headers: {
                     Authorization: `Bearer ${token}`,
                   },
-                }
+                },
               );
 
               if (response.ok) {
@@ -686,7 +709,7 @@ export default function AdminSubmissionDetailPage({
                             {labels[need] || need}
                           </Badge>
                         );
-                      }
+                      },
                     )}
                   </div>
                 </div>
@@ -708,6 +731,292 @@ export default function AdminSubmissionDetailPage({
                 </label>
                 <p className='text-sm text-gray-700 bg-gray-50 p-3 rounded-md'>
                   {submission.special_requirements}
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Church Details & Vision */}
+      {(submission.church_denominational_affiliation ||
+        submission.church_member_count ||
+        submission.church_building_condition ||
+        (submission.church_site_condition_issues &&
+          submission.church_site_condition_issues.length > 0) ||
+        (submission.church_exploration_reasons &&
+          submission.church_exploration_reasons.length > 0) ||
+        submission.church_ministries_using_property) && (
+        <Card className='mb-4 sm:mb-6'>
+          <CardHeader>
+            <CardTitle className='flex items-center gap-2 text-lg sm:text-xl'>
+              <Building2 className='h-5 w-5' />
+              Church Details & Vision
+            </CardTitle>
+          </CardHeader>
+          <CardContent className='space-y-4'>
+            {submission.church_denominational_affiliation && (
+              <div>
+                <label className='text-sm font-medium text-gray-500'>
+                  Denominational Affiliation
+                </label>
+                <p className='mt-1 text-sm'>
+                  <Badge variant='outline'>
+                    {submission.church_denominational_affiliation
+                      .split('_')
+                      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+                      .join(' ')}
+                  </Badge>
+                </p>
+              </div>
+            )}
+            {submission.church_member_count && (
+              <div>
+                <label className='text-sm font-medium text-gray-500'>
+                  Member Count
+                </label>
+                <p className='mt-1 font-semibold'>
+                  {submission.church_member_count.toLocaleString()} members
+                </p>
+              </div>
+            )}
+            {submission.church_building_condition && (
+              <div>
+                <label className='text-sm font-medium text-gray-500'>
+                  Building Condition
+                </label>
+                <p className='mt-1'>
+                  <Badge variant='secondary'>
+                    {submission.church_building_condition
+                      .split('_')
+                      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+                      .join(' ')}
+                  </Badge>
+                </p>
+              </div>
+            )}
+            {submission.church_site_condition_issues &&
+              submission.church_site_condition_issues.length > 0 && (
+                <div>
+                  <label className='text-sm font-medium text-gray-500 block mb-2'>
+                    Site Condition Issues
+                  </label>
+                  <div className='flex flex-wrap gap-2'>
+                    {submission.church_site_condition_issues.map(
+                      (issue: string) => (
+                        <Badge key={issue} variant='secondary'>
+                          {issue
+                            .split('_')
+                            .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+                            .join(' ')}
+                        </Badge>
+                      ),
+                    )}
+                  </div>
+                </div>
+              )}
+            {submission.church_exploration_reasons &&
+              submission.church_exploration_reasons.length > 0 && (
+                <div>
+                  <label className='text-sm font-medium text-gray-500 block mb-2'>
+                    Reasons for Exploring
+                  </label>
+                  <div className='flex flex-wrap gap-2'>
+                    {submission.church_exploration_reasons.map(
+                      (reason: string) => (
+                        <Badge key={reason} variant='outline'>
+                          {reason
+                            .split('_')
+                            .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+                            .join(' ')}
+                        </Badge>
+                      ),
+                    )}
+                  </div>
+                </div>
+              )}
+            {submission.church_ministries_using_property && (
+              <div>
+                <label className='text-sm font-medium text-gray-500 block mb-2'>
+                  Current Ministries Using Property
+                </label>
+                <p className='text-sm text-gray-700 bg-gray-50 p-3 rounded-md'>
+                  {submission.church_ministries_using_property}
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Property Debt & Restrictions */}
+      {(submission.has_property_debt ||
+        submission.has_transfer_restrictions ||
+        submission.has_long_term_leases) && (
+        <Card className='mb-4 sm:mb-6'>
+          <CardHeader>
+            <CardTitle className='flex items-center gap-2 text-lg sm:text-xl'>
+              <DollarSign className='h-5 w-5' />
+              Property Debt & Restrictions
+            </CardTitle>
+          </CardHeader>
+          <CardContent className='space-y-4'>
+            {submission.has_property_debt && (
+              <div>
+                <label className='text-sm font-medium text-gray-500 block mb-2'>
+                  Property Debt
+                </label>
+                {submission.property_debt_amount && (
+                  <p className='font-semibold text-lg mb-2'>
+                    ${submission.property_debt_amount.toLocaleString()}
+                  </p>
+                )}
+                {submission.property_debt_terms && (
+                  <p className='text-sm text-gray-700 bg-gray-50 p-3 rounded-md'>
+                    {submission.property_debt_terms}
+                  </p>
+                )}
+              </div>
+            )}
+            {submission.has_transfer_restrictions &&
+              submission.transfer_restrictions_description && (
+                <div>
+                  <label className='text-sm font-medium text-gray-500 block mb-2'>
+                    Transfer Restrictions
+                  </label>
+                  <p className='text-sm text-gray-700 bg-gray-50 p-3 rounded-md'>
+                    {submission.transfer_restrictions_description}
+                  </p>
+                </div>
+              )}
+            {submission.has_long_term_leases &&
+              submission.long_term_leases_description && (
+                <div>
+                  <label className='text-sm font-medium text-gray-500 block mb-2'>
+                    Long-term Leases
+                  </label>
+                  <p className='text-sm text-gray-700 bg-gray-50 p-3 rounded-md'>
+                    {submission.long_term_leases_description}
+                  </p>
+                </div>
+              )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Project Vision & Preferences */}
+      {((submission.project_components_wanted &&
+        submission.project_components_wanted.length > 0) ||
+        submission.sunday_parking_needed ||
+        (submission.partnership_structure_preferences &&
+          submission.partnership_structure_preferences.length > 0) ||
+        (submission.decision_making_structure &&
+          submission.decision_making_structure.length > 0) ||
+        submission.timeline_preference_new ||
+        submission.reinvestment_preference) && (
+        <Card className='mb-4 sm:mb-6'>
+          <CardHeader>
+            <CardTitle className='flex items-center gap-2 text-lg sm:text-xl'>
+              <TrendingUp className='h-5 w-5' />
+              Project Vision & Partnership Preferences
+            </CardTitle>
+          </CardHeader>
+          <CardContent className='space-y-4'>
+            {submission.project_components_wanted &&
+              submission.project_components_wanted.length > 0 && (
+                <div>
+                  <label className='text-sm font-medium text-gray-500 block mb-2'>
+                    Desired Project Components
+                  </label>
+                  <div className='flex flex-wrap gap-2'>
+                    {submission.project_components_wanted.map(
+                      (component: string) => (
+                        <Badge key={component} variant='secondary'>
+                          {component
+                            .split('_')
+                            .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+                            .join(' ')}
+                        </Badge>
+                      ),
+                    )}
+                  </div>
+                </div>
+              )}
+            {submission.sunday_parking_needed && (
+              <div>
+                <label className='text-sm font-medium text-gray-500'>
+                  Sunday Parking Spaces Needed
+                </label>
+                <p className='mt-1 font-semibold'>
+                  {submission.sunday_parking_needed} spaces
+                </p>
+              </div>
+            )}
+            {submission.partnership_structure_preferences &&
+              submission.partnership_structure_preferences.length > 0 && (
+                <div>
+                  <label className='text-sm font-medium text-gray-500 block mb-2'>
+                    Partnership Structure Preferences
+                  </label>
+                  <div className='flex flex-wrap gap-2'>
+                    {submission.partnership_structure_preferences.map(
+                      (pref: string) => (
+                        <Badge key={pref} variant='outline'>
+                          {pref
+                            .split('_')
+                            .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+                            .join(' ')}
+                        </Badge>
+                      ),
+                    )}
+                  </div>
+                </div>
+              )}
+            {submission.decision_making_structure &&
+              submission.decision_making_structure.length > 0 && (
+                <div>
+                  <label className='text-sm font-medium text-gray-500 block mb-2'>
+                    Decision Makers
+                  </label>
+                  <div className='flex flex-wrap gap-2'>
+                    {submission.decision_making_structure.map(
+                      (decision: string) => (
+                        <Badge key={decision} variant='secondary'>
+                          {decision.charAt(0).toUpperCase() + decision.slice(1)}
+                        </Badge>
+                      ),
+                    )}
+                  </div>
+                </div>
+              )}
+            {submission.timeline_preference_new && (
+              <div>
+                <label className='text-sm font-medium text-gray-500'>
+                  Timeline Preference
+                </label>
+                <p className='mt-1'>
+                  <Badge>
+                    {submission.timeline_preference_new
+                      .replace('_', '-')
+                      .split('-')
+                      .map((w, i) => (i === 0 ? w : w + ' months'))
+                      .join(' ')}
+                  </Badge>
+                </p>
+              </div>
+            )}
+            {submission.reinvestment_preference && (
+              <div>
+                <label className='text-sm font-medium text-gray-500'>
+                  Reinvestment Preference
+                </label>
+                <p className='mt-1'>
+                  <Badge variant='outline'>
+                    {submission.reinvestment_preference
+                      .split('_')
+                      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+                      .join(' ')}
+                  </Badge>
                 </p>
               </div>
             )}

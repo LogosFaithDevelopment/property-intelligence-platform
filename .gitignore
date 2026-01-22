@@ -309,3 +309,8 @@ local_schema.sql
 
 # Frontend script with hardcoded path
 frontend/scripts/cleanup-console-logs.sh
+backendlogs.md
+run-dev-migrations.sh
+sync-dev-schema.sh
+backend/alembic/versions/*.sql
+docs/FORM_ENHANCEMENT_16_QUESTIONS.md

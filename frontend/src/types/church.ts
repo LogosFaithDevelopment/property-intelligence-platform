@@ -72,6 +72,51 @@ export const REVENUE_SHARING_OPTIONS = [
 
 export type RevenueSharingPreference = (typeof REVENUE_SHARING_OPTIONS)[number];
 
+// Denominational Affiliation Options (Form Enhancement)
+export const DENOMINATIONAL_AFFILIATION_OPTIONS = [
+  'non_denominational',
+  'ame',
+  'baptist',
+  'cogic',
+  'umc',
+  'other',
+] as const;
+
+export type DenominationalAffiliation =
+  (typeof DENOMINATIONAL_AFFILIATION_OPTIONS)[number];
+
+// Building Condition Options (Form Enhancement)
+export const BUILDING_CONDITION_OPTIONS = [
+  'excellent',
+  'good',
+  'fair',
+  'poor',
+  'very_poor',
+] as const;
+
+export type BuildingCondition = (typeof BUILDING_CONDITION_OPTIONS)[number];
+
+// Partnership Structure Options (Form Enhancement)
+export const PARTNERSHIP_STRUCTURE_OPTIONS = [
+  'ground_lease',
+  'limited_partnership',
+  'fee_development',
+  'unsure',
+] as const;
+
+export type PartnershipStructure =
+  (typeof PARTNERSHIP_STRUCTURE_OPTIONS)[number];
+
+// Timeline Preference (New - more specific)
+export const TIMELINE_PREFERENCE_NEW_OPTIONS = [
+  '0_6_months',
+  '6_12_months',
+  '12_plus_months',
+] as const;
+
+export type TimelinePreferenceNew =
+  (typeof TIMELINE_PREFERENCE_NEW_OPTIONS)[number];
+
 // ========== PHASE 2 & 3: LOGOS DEAL FRAMEWORK OPTIONS ==========
 
 // Decision Making Authority Options (Phase 3)
@@ -106,6 +151,14 @@ export interface ChurchSubmissionFormData {
   legal_name?: string;
   denomination?: string;
   founded_year?: number;
+
+  // Form Enhancement Fields (Step 1)
+  denominational_affiliation?: DenominationalAffiliation;
+  member_count?: number;
+  building_condition?: BuildingCondition;
+  site_condition_issues?: string[]; // Multi-select: environmental, structural, access, utility, legal
+  exploration_reasons?: string[]; // Multi-select: declining_membership, financial_challenges, aging_facility, etc.
+  ministries_using_property?: string; // Textarea for current ministry activities
 
   // Entity & Tax Information (NEW FIELDS)
   entity_type: EntityType; // Maps to tax_exempt_status in backend
@@ -159,6 +212,15 @@ export interface ChurchSubmissionFormData {
   mortgage_balance?: number;
   assessed_value?: number;
 
+  // Form Enhancement: Detailed Debt & Restrictions (Step 2)
+  has_property_debt?: boolean;
+  property_debt_amount?: number;
+  property_debt_terms?: string;
+  has_transfer_restrictions?: boolean;
+  transfer_restrictions_description?: string;
+  has_long_term_leases?: boolean;
+  long_term_leases_description?: string;
+
   // ========== SECTION 4: CONGREGATION APPROVAL ==========
   congregation_voted: boolean;
   vote_percentage?: number; // Required if congregation_voted is true
@@ -170,12 +232,23 @@ export interface ChurchSubmissionFormData {
   parking_spaces_needed_after: number;
   special_requirements?: string;
 
+  // Form Enhancement: Project Vision (Step 2)
+  project_components_wanted?: string[]; // Multi-select: affordable_housing, senior_housing, family_housing, sanctuary, fellowship_hall, offices, classrooms, parking
+  sunday_parking_needed?: number;
+
   // ========== SECTION 6: TIMELINE & PREFERENCES ==========
   timeline_preference: TimelinePreference;
   preferred_unit_count?: number;
   affordability_target?: AffordabilityTarget;
   revenue_sharing_preference?: RevenueSharingPreference;
   development_involvement_level?: InvolvementLevel;
+
+  // Form Enhancement: Partnership & Timeline (Step 3)
+  partnership_structure_preferences?: PartnershipStructure[];
+  decision_making_structure?: DecisionAuthority[]; // Who makes decisions: pastor, board, congregation, denomination
+  timeline_preference_new?: TimelinePreferenceNew;
+  reinvestment_preference?: string; // Dropdown: maximize_church_share, maximize_affordable_housing, balance_both
+  priority_ranking?: string[]; // Ordered array of priorities
 
   // ========== SECTION 7: PROPERTY IMPROVEMENT & FINANCING NEEDS ==========
   property_improvement_needs?: string[]; // List of needed improvements
@@ -205,6 +278,13 @@ export interface ChurchSubmissionApiPayload {
     primary_contact_name: string;
     primary_contact_email: string;
     primary_contact_phone: string;
+    // Form Enhancement Fields
+    denominational_affiliation?: string;
+    member_count?: number;
+    building_condition?: string;
+    site_condition_issues?: string[];
+    exploration_reasons?: string[];
+    ministries_using_property?: string;
   };
 
   // Property data
@@ -238,6 +318,21 @@ export interface ChurchSubmissionApiPayload {
     development_involvement_level?: string;
     available_build_sqft?: number; // NEW FIELD
     build_area_notes?: string; // NEW FIELD
+    // Form Enhancement Fields
+    has_property_debt?: boolean;
+    property_debt_amount?: number;
+    property_debt_terms?: string;
+    has_transfer_restrictions?: boolean;
+    transfer_restrictions_description?: string;
+    has_long_term_leases?: boolean;
+    long_term_leases_description?: string;
+    project_components_wanted?: string[];
+    sunday_parking_needed?: number;
+    partnership_structure_preferences?: string[];
+    decision_making_structure?: string[];
+    timeline_preference_new?: string;
+    reinvestment_preference?: string;
+    priority_ranking?: string[];
   };
 }
 

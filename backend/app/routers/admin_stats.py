@@ -386,6 +386,14 @@ class AssessmentDetail(BaseModel):
     church_congregation_size: Optional[int]
     church_annual_budget: Optional[float]
     
+    # NEW: Enhanced Church Fields
+    church_denominational_affiliation: Optional[str]
+    church_member_count: Optional[int]
+    church_building_condition: Optional[str]
+    church_site_condition_issues: Optional[List[str]]
+    church_exploration_reasons: Optional[List[str]]
+    church_ministries_using_property: Optional[str]
+    
     # Property data
     property_id: int
     property_street_address: Optional[str]
@@ -420,6 +428,21 @@ class AssessmentDetail(BaseModel):
     special_requirements: Optional[str]
     property_improvement_needs: Optional[List[str]]  # List of improvement needs
     capital_financing_need: Optional[str]
+    
+    # NEW: Enhanced Assessment Fields
+    has_property_debt: Optional[bool]
+    property_debt_amount: Optional[float]
+    property_debt_terms: Optional[str]
+    has_transfer_restrictions: Optional[bool]
+    transfer_restrictions_description: Optional[str]
+    has_long_term_leases: Optional[bool]
+    long_term_leases_description: Optional[str]
+    project_components_wanted: Optional[List[str]]
+    sunday_parking_needed: Optional[int]
+    partnership_structure_preferences: Optional[List[str]]
+    decision_making_structure: Optional[List[str]]
+    timeline_preference_new: Optional[str]
+    reinvestment_preference: Optional[str]
     
     class Config:
         from_attributes = True
@@ -471,6 +494,13 @@ async def get_submission_detail(
             Church.zip_code.label("church_zip_code"),
             Church.congregation_size.label("church_congregation_size"),
             Church.annual_budget.label("church_annual_budget"),
+            # NEW: Enhanced Church Fields
+            Church.denominational_affiliation.label("church_denominational_affiliation"),
+            Church.member_count.label("church_member_count"),
+            Church.building_condition.label("church_building_condition"),
+            Church.site_condition_issues.label("church_site_condition_issues"),
+            Church.exploration_reasons.label("church_exploration_reasons"),
+            Church.ministries_using_property.label("church_ministries_using_property"),
             # Property data
             Property.id.label("property_id"),
             Property.street_address.label("property_street_address"),
@@ -502,6 +532,20 @@ async def get_submission_detail(
             Assessment.special_requirements,
             Assessment.property_improvement_needs,
             Assessment.capital_financing_need,
+            # NEW: Enhanced Assessment Fields
+            Assessment.has_property_debt,
+            Assessment.property_debt_amount,
+            Assessment.property_debt_terms,
+            Assessment.has_transfer_restrictions,
+            Assessment.transfer_restrictions_description,
+            Assessment.has_long_term_leases,
+            Assessment.long_term_leases_description,
+            Assessment.project_components_wanted,
+            Assessment.sunday_parking_needed,
+            Assessment.partnership_structure_preferences,
+            Assessment.decision_making_structure,
+            Assessment.timeline_preference_new,
+            Assessment.reinvestment_preference,
         )
         .join(Church, Assessment.church_id == Church.id)
         .join(Property, Assessment.property_id == Property.id)
@@ -549,6 +593,13 @@ async def get_submission_detail(
         church_zip_code=row.church_zip_code,
         church_congregation_size=row.church_congregation_size,
         church_annual_budget=row.church_annual_budget,
+        # NEW: Enhanced Church Fields
+        church_denominational_affiliation=row.church_denominational_affiliation.value if row.church_denominational_affiliation else None,
+        church_member_count=row.church_member_count,
+        church_building_condition=row.church_building_condition.value if row.church_building_condition else None,
+        church_site_condition_issues=row.church_site_condition_issues,
+        church_exploration_reasons=row.church_exploration_reasons,
+        church_ministries_using_property=row.church_ministries_using_property,
         # Property data
         property_id=row.property_id,
         property_street_address=row.property_street_address,
@@ -580,4 +631,18 @@ async def get_submission_detail(
         special_requirements=row.special_requirements,
         property_improvement_needs=row.property_improvement_needs,
         capital_financing_need=row.capital_financing_need,
+        # NEW: Enhanced Assessment Fields
+        has_property_debt=row.has_property_debt,
+        property_debt_amount=row.property_debt_amount,
+        property_debt_terms=row.property_debt_terms,
+        has_transfer_restrictions=row.has_transfer_restrictions,
+        transfer_restrictions_description=row.transfer_restrictions_description,
+        has_long_term_leases=row.has_long_term_leases,
+        long_term_leases_description=row.long_term_leases_description,
+        project_components_wanted=row.project_components_wanted,
+        sunday_parking_needed=row.sunday_parking_needed,
+        partnership_structure_preferences=row.partnership_structure_preferences,
+        decision_making_structure=row.decision_making_structure,
+        timeline_preference_new=row.timeline_preference_new.value if row.timeline_preference_new else None,
+        reinvestment_preference=row.reinvestment_preference,
     )

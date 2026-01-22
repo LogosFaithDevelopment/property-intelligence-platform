@@ -6,9 +6,8 @@ Pydantic models for admin login/signup requests and responses
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr
-
 from app.models.admin_user import AdminRole
+from pydantic import BaseModel, EmailStr
 
 
 class AdminSignInRequest(BaseModel):
@@ -51,3 +50,11 @@ class AdminUserUpdate(BaseModel):
     full_name: Optional[str] = None
     role: Optional[AdminRole] = None
     is_active: Optional[bool] = None
+
+
+class CreateAdminUserRequest(BaseModel):
+    """Schema for creating admin users via API (replaces CLI tool)"""
+    clerk_user_id: str
+    email: EmailStr
+    role: AdminRole
+    full_name: Optional[str] = None

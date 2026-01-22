@@ -309,7 +309,7 @@ async def fetch_property_data_by_address(
                                                   "torrance", "long beach", "santa monica", "pomona", 
                                                   "el monte", "inglewood", "downey", "norwalk", 
                                                   "west covina", "carson", "lancaster", "palmdale", 
-                                                  "alhambra", "compton", "hawthorne"]:
+                                                  "alhambra", "compton", "hawthorne", "watts"]:
                     return {
                         "success": False,
                         "error": "not_la_county",
