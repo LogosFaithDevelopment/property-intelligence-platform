@@ -96,7 +96,7 @@ export default function AdminLayout({
               className='object-contain w-full h-full'
             />
           </div>
-          <div className='font-bold text-base font-[family-name:var(--font-safe-light-accent)]'>
+          <div className='font-normal text-base font-[family-name:var(--font-safe-light-accent)]'>
             Logos Admin
           </div>
         </Link>
@@ -135,7 +135,7 @@ export default function AdminLayout({
                   />
                 </div>
                 <div className='flex flex-col gap-0.5'>
-                  <div className='font-bold text-lg font-[family-name:var(--font-safe-light-accent)] leading-tight'>
+                  <div className='font-normal text-lg font-[family-name:var(--font-safe-light-accent)] leading-tight'>
                     Logos Admin
                   </div>
                   <div className='text-xs text-gray-500 leading-tight'>

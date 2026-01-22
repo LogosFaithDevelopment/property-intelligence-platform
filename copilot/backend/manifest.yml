@@ -47,9 +47,50 @@ variables:
 
 # Override configurations per environment
 environments:
-  production:
+  dev:
+    http:
+      alias: api-dev.logosfaithdevelopment.com
     variables:
-      ALLOWED_ORIGINS: https://logos.lotspecs.com
+      ENVIRONMENT: development
+      LOG_LEVEL: DEBUG
+      DEBUG: 'true'
+      ALLOWED_ORIGINS: https://dev.logosfaithdevelopment.com
+      ALLOWED_HOSTS: '*'
+    secrets:
+      SECRET_KEY: 'arn:aws:secretsmanager:us-east-1:260150787661:secret:SECRET_KEY_dev-DcnPR6'
+      CLERK_SECRET_KEY: 'arn:aws:secretsmanager:us-east-1:260150787661:secret:CLERK_SECRET_KEY_dev-V1bo4A'
+      OPENAI_API_KEY: 'arn:aws:secretsmanager:us-east-1:260150787661:secret:OPENAI_API_KEY_dev-dOMbkl'
+      ATTOM_API_KEY: 'arn:aws:secretsmanager:us-east-1:260150787661:secret:ATTOM_API_KEY_dev-KaOZyT'
+      SMARTY_AUTH_ID: 'arn:aws:secretsmanager:us-east-1:260150787661:secret:SMARTY_AUTH_ID_dev-H2wAbf'
+      SMARTY_AUTH_TOKEN: 'arn:aws:secretsmanager:us-east-1:260150787661:secret:SMARTY_AUTH_TOKEN_dev-y1oVCO'
+      HUD_API_KEY: 'arn:aws:secretsmanager:us-east-1:260150787661:secret:HUD_API_KEY_dev-4ZLZ3I'
+      GOOGLE_MAPS_API_KEY: 'arn:aws:secretsmanager:us-east-1:260150787661:secret:GOOGLE_MAPS_API_KEY_dev-rQ8Rh7'
+      DATABASE_URL: 'arn:aws:secretsmanager:us-east-1:260150787661:secret:property-assessment/database-dev-EUIWQw'
+      REDIS_URL: 'arn:aws:secretsmanager:us-east-1:260150787661:secret:property-assessment/redis-dev-yoXaDQ'
+    exec_role_policy:
+      Version: '2012-10-17'
+      Statement:
+        - Sid: AllowSecretsManagerAccess
+          Effect: Allow
+          Action:
+            - 'secretsmanager:GetSecretValue'
+            - 'secretsmanager:DescribeSecret'
+          Resource:
+            - 'arn:aws:secretsmanager:us-east-1:260150787661:secret:SECRET_KEY_dev-*'
+            - 'arn:aws:secretsmanager:us-east-1:260150787661:secret:CLERK_SECRET_KEY_dev-*'
+            - 'arn:aws:secretsmanager:us-east-1:260150787661:secret:OPENAI_API_KEY_dev-*'
+            - 'arn:aws:secretsmanager:us-east-1:260150787661:secret:ATTOM_API_KEY_dev-*'
+            - 'arn:aws:secretsmanager:us-east-1:260150787661:secret:SMARTY_AUTH_ID_dev-*'
+            - 'arn:aws:secretsmanager:us-east-1:260150787661:secret:SMARTY_AUTH_TOKEN_dev-*'
+            - 'arn:aws:secretsmanager:us-east-1:260150787661:secret:HUD_API_KEY_dev-*'
+            - 'arn:aws:secretsmanager:us-east-1:260150787661:secret:GOOGLE_MAPS_API_KEY_dev-*'
+            - 'arn:aws:secretsmanager:us-east-1:260150787661:secret:property-assessment/database-dev-*'
+            - 'arn:aws:secretsmanager:us-east-1:260150787661:secret:property-assessment/redis-dev-*'
+  production:
+    http:
+      alias: api.logosfaithdevelopment.com
+    variables:
+      ALLOWED_ORIGINS: https://app.logosfaithdevelopment.com
       ALLOWED_HOSTS: '*'
     secrets:
       # Direct Secrets Manager ARNs for the secrets you just created

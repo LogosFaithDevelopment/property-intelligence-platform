@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   FormControl,
   FormDescription,
@@ -13,6 +13,13 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { UseFormReturn } from 'react-hook-form';
 import { ChurchSubmissionFormValues } from '@/lib/validations/submission';
 import {
@@ -23,8 +30,17 @@ import {
   Plus,
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { fetchPropertyDataByAddress } from '@/lib/api/property-data';
+
+import { Checkbox } from '@/components/ui/checkbox';
 
 interface Section2PropertyDetailsProps {
   form: UseFormReturn<ChurchSubmissionFormValues>;
@@ -41,16 +57,24 @@ interface Section2PropertyDetailsProps {
 export function Section2PropertyDetails({
   form,
 }: Section2PropertyDetailsProps) {
-  const { toast } = useToast();
   const [isFetching, setIsFetching] = useState(false);
+  const [showFormatDialog, setShowFormatDialog] = useState(false);
   const [autoFilledFields, setAutoFilledFields] = useState<Set<string>>(
-    new Set()
+    new Set(),
   );
   const [fetchAttempted, setFetchAttempted] = useState(false);
   const [parcelInfo, setParcelInfo] = useState<{
     lot_numbers?: string;
     parcel_number?: string;
   } | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
+  const [additionalAddressErrors, setAdditionalAddressErrors] = useState<
+    Map<number, string>
+  >(new Map());
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const propertyAddress = form.watch('property_address');
   const propertyCity = form.watch('property_city');
@@ -60,12 +84,9 @@ export function Section2PropertyDetails({
   // Handler to fetch property data from LA County API (including additional addresses)
   const handleFetchPropertyData = async () => {
     if (!propertyAddress || !propertyCity || !propertyState || !propertyZip) {
-      toast({
-        title: 'Missing Address Information',
-        description:
-          'Please fill in all address fields before fetching property data.',
-        variant: 'destructive',
-      });
+      toast.error(
+        'Please fill in all address fields before fetching property data.',
+      );
       return;
     }
 
@@ -82,7 +103,29 @@ export function Section2PropertyDetails({
       });
 
       if (!response.success || !response.data) {
-        throw new Error(response.error || 'Failed to fetch property data');
+        const errorMsg = response.error || 'unknown';
+        const primaryAddressStr = `${propertyAddress}, ${propertyCity}`;
+
+        if (errorMsg === 'not_found') {
+          toast.error(
+            `Primary address not found: ${primaryAddressStr}. Property data not available - please verify address or enter manually.`,
+          );
+        } else if (errorMsg === 'not_la_county') {
+          toast.error(
+            `${propertyCity} may not be in LA County. Property data auto-fill only works for LA County addresses. Please enter details manually.`,
+          );
+        } else if (errorMsg === 'no_data_source') {
+          toast.error(
+            `Property data not available for ${propertyState}. Please enter details manually.`,
+          );
+        } else {
+          toast.error(
+            `Could not fetch property data for: ${primaryAddressStr}. Please enter details manually.`,
+          );
+        }
+
+        setIsFetching(false);
+        return;
       }
 
       // Store primary lot size
@@ -98,14 +141,17 @@ export function Section2PropertyDetails({
       };
 
       console.log(
-        `🏠 Primary address: ${totalLotSqft} sqft lot, ${totalBuildingSqft} sqft building`
+        `🏠 Primary address: ${totalLotSqft} sqft lot, ${totalBuildingSqft} sqft building`,
       );
 
       // Fetch ADDITIONAL addresses if they exist
       const additionalAddrs = additionalAddresses || [];
+      const newErrors = new Map<number, string>();
+      let successfulFetches = 1; // Start with 1 for primary address
+
       if (additionalAddrs.length > 0) {
         console.log(
-          `📍 Fetching ${additionalAddrs.length} additional address(es)...`
+          `📍 Fetching ${additionalAddrs.length} additional address(es)...`,
         );
 
         for (let i = 0; i < additionalAddrs.length; i++) {
@@ -113,8 +159,10 @@ export function Section2PropertyDetails({
 
           if (!addr.address || !addr.city || !addr.state || !addr.zip_code) {
             console.warn(
-              `⚠️ Skipping additional address #${i + 1} - incomplete`
+              `⚠️ Skipping additional address #${i + 1} - incomplete`,
             );
+            newErrors.set(i, 'Incomplete address - please fill in all fields');
+            continue;
             continue;
           }
 
@@ -151,73 +199,61 @@ export function Section2PropertyDetails({
               console.log(
                 `✅ Additional address #${
                   i + 1
-                }: ${additionalLotSqft} sqft lot, ${additionalBuildingSqft} sqft building`
+                }: ${additionalLotSqft} sqft lot, ${additionalBuildingSqft} sqft building`,
               );
+              successfulFetches++;
             } else {
+              const errorMsg = additionalResponse.error || 'not_found';
+              const addressStr = `${addr.address}, ${addr.city}`;
+
               console.warn(`⚠️ Failed to fetch additional address #${i + 1}`);
+
+              if (errorMsg === 'not_found') {
+                newErrors.set(
+                  i,
+                  'Address not found - data not available. Please verify address or enter lot size manually.',
+                );
+              } else if (errorMsg === 'not_la_county') {
+                newErrors.set(
+                  i,
+                  `${addr.city} may not be in LA County - property data unavailable.`,
+                );
+              } else {
+                newErrors.set(i, 'Could not fetch data for this address.');
+              }
             }
           } catch (err) {
             console.error(
               `❌ Error fetching additional address #${i + 1}:`,
-              err
+              err,
             );
           }
         }
       }
 
       console.log(
-        `🎯 COMBINED TOTALS: ${totalLotSqft} sqft lot, ${totalBuildingSqft} sqft building`
+        `🎯 COMBINED TOTALS: ${totalLotSqft} sqft lot, ${totalBuildingSqft} sqft building`,
       );
 
       const newAutoFilledFields = new Set<string>();
 
-      // Only auto-fill if the field is currently empty (manual entries take precedence)
-      if (!form.getValues('lot_size_sqft')) {
-        console.log(
-          '🔍 Auto-fetch setting lot_size_sqft:',
-          totalLotSqft,
-          'Type:',
-          typeof totalLotSqft
-        );
-        console.log(
-          '🔍 Auto-fetch setting lot_size_acres:',
-          totalLotAcres,
-          'Type:',
-          typeof totalLotAcres
-        );
+      // Always set the values when fetching (overwrite any existing values)
+      form.setValue('lot_size_sqft', totalLotSqft, { shouldValidate: true });
+      form.setValue('lot_size_acres', totalLotAcres, {
+        shouldValidate: true,
+      });
+      newAutoFilledFields.add('lot_size_sqft');
 
-        form.setValue('lot_size_sqft', totalLotSqft, { shouldValidate: true });
-        form.setValue('lot_size_acres', totalLotAcres, {
-          shouldValidate: true,
-        });
-        newAutoFilledFields.add('lot_size_sqft');
+      // Zoning description from Smarty (priority) or LA County - always update if available
+      const zoningInfo =
+        response.data.zoning || // Smarty zoning (e.g., "R3-1")
+        response.data.land_use || // Smarty land use (e.g., "Religious")
+        response.data.use_type || // LA County use type
+        response.data.classification; // LA County classification
 
-        console.log(
-          '✅ After setValue - lot_size_sqft:',
-          form.getValues('lot_size_sqft'),
-          'Type:',
-          typeof form.getValues('lot_size_sqft')
-        );
-        console.log(
-          '✅ After setValue - lot_size_acres:',
-          form.getValues('lot_size_acres'),
-          'Type:',
-          typeof form.getValues('lot_size_acres')
-        );
-      }
-
-      // Zoning description from Smarty (priority) or LA County
-      if (!form.getValues('zoning_description')) {
-        const zoningInfo =
-          response.data.zoning || // Smarty zoning (e.g., "R3-1")
-          response.data.land_use || // Smarty land use (e.g., "Religious")
-          response.data.use_type || // LA County use type
-          response.data.classification; // LA County classification
-
-        if (zoningInfo) {
-          form.setValue('zoning_description', zoningInfo);
-          newAutoFilledFields.add('zoning_description');
-        }
+      if (zoningInfo) {
+        form.setValue('zoning_description', zoningInfo);
+        newAutoFilledFields.add('zoning_description');
       }
 
       setAutoFilledFields(newAutoFilledFields);
@@ -225,20 +261,30 @@ export function Section2PropertyDetails({
       // Store combined parcel/lot info for display
       setParcelInfo(allParcelInfo);
 
-      const addressCount = 1 + additionalAddrs.length;
-      toast({
-        title: 'Property Data Fetched',
-        description: `Auto-filled ${newAutoFilledFields.size} field(s) from ${addressCount} address(es).`,
-        duration: 5000,
-      });
+      // Set errors for failed additional addresses
+      setAdditionalAddressErrors(newErrors);
+
+      const totalAddresses = 1 + additionalAddrs.length;
+      const failedCount = newErrors.size;
+
+      if (failedCount === 0) {
+        toast.success(
+          `Property Data Fetched - Auto-filled ${newAutoFilledFields.size} field(s) from ${successfulFetches} address(es).`,
+        );
+      } else if (successfulFetches === 1) {
+        toast.success(
+          `Primary address fetched successfully. ${failedCount} additional address(es) failed - see messages below.`,
+        );
+      } else {
+        toast.success(
+          `Fetched data from ${successfulFetches} of ${totalAddresses} addresses. See messages below for failed addresses.`,
+        );
+      }
     } catch (error) {
       console.error('Error fetching property data:', error);
-      toast({
-        title: 'Error',
-        description:
-          'An error occurred while fetching property data. Please try again or enter details manually.',
-        variant: 'destructive',
-      });
+      toast.error(
+        'An error occurred while fetching property data. Please try again or enter details manually.',
+      );
     } finally {
       setIsFetching(false);
     }
@@ -298,12 +344,22 @@ export function Section2PropertyDetails({
           name='property_address'
           render={({ field }) => (
             <FormItem>
-              <FormLabel>
-                Property Address <span className='text-red-500'>*</span>
-              </FormLabel>
+              <div className='flex items-center gap-2'>
+                <FormLabel>
+                  Property Address <span className='text-red-500'>*</span>
+                </FormLabel>
+                <button
+                  type='button'
+                  className='text-blue-600 hover:text-blue-700 text-xs flex items-center gap-1'
+                  onClick={() => setShowFormatDialog(true)}
+                >
+                  <InfoIcon className='h-3.5 w-3.5' />
+                  <span>Format examples</span>
+                </button>
+              </div>
               <FormControl>
                 <Input
-                  placeholder='123 Church Lane, Los Angeles, CA 90001'
+                  placeholder='e.g., 10304-10312 S. Central Avenue or 123 Church Lane'
                   {...field}
                   value={field.value ?? ''}
                 />
@@ -399,14 +455,30 @@ export function Section2PropertyDetails({
                       form.getValues('additional_addresses') || [];
                     form.setValue(
                       'additional_addresses',
-                      current.filter((_, i) => i !== index)
+                      current.filter((_, i) => i !== index),
                     );
+                    // Clear error for this address
+                    setAdditionalAddressErrors((prev) => {
+                      const updated = new Map(prev);
+                      updated.delete(index);
+                      return updated;
+                    });
                   }}
                   className='text-red-600 hover:text-red-700'
                 >
                   Remove
                 </Button>
               </div>
+
+              {/* Error message for this address */}
+              {additionalAddressErrors.has(index) && (
+                <Alert variant='destructive' className='mb-3'>
+                  <AlertTriangle className='h-4 w-4' />
+                  <AlertDescription>
+                    {additionalAddressErrors.get(index)}
+                  </AlertDescription>
+                </Alert>
+              )}
 
               <div className='grid grid-cols-1 gap-3'>
                 <Input
@@ -474,9 +546,19 @@ export function Section2PropertyDetails({
             variant='outline'
             onClick={() => {
               const current = form.getValues('additional_addresses') || [];
+              // Auto-populate city, state, zip from primary address
+              const primaryCity = form.getValues('property_city') || '';
+              const primaryState = form.getValues('property_state') || '';
+              const primaryZip = form.getValues('property_zip_code') || '';
+
               form.setValue('additional_addresses', [
                 ...current,
-                { address: '', city: '', state: '', zip_code: '' },
+                {
+                  address: '',
+                  city: primaryCity,
+                  state: primaryState,
+                  zip_code: primaryZip,
+                },
               ]);
             }}
             className='w-full'
@@ -493,37 +575,76 @@ export function Section2PropertyDetails({
               Auto-Fill Property Details
             </h3>
             <p className='text-xs text-muted-foreground'>
-              For LA County properties, we can automatically fetch lot size and
-              zoning information from public records.
+              We can automatically fetch lot size, parcel number, zoning, and
+              other property data from public records (works nationwide).
             </p>
           </div>
-          <Button
-            type='button'
-            onClick={handleFetchPropertyData}
-            disabled={
-              isFetching ||
-              !propertyAddress ||
-              !propertyCity ||
-              !propertyState ||
-              !propertyZip
-            }
-            variant='outline'
-            className='shrink-0'
-          >
-            {isFetching ? (
-              <>
-                <Loader2 className='mr-2 h-4 w-4 animate-spin' />
-                Fetching...
-              </>
-            ) : fetchAttempted && autoFilledFields.size > 0 ? (
-              <>
-                <CheckCircle2 className='mr-2 h-4 w-4 text-green-600' />
-                Fetched
-              </>
-            ) : (
-              'Fetch Property Data'
+          <div className='flex gap-2 shrink-0'>
+            <Button
+              type='button'
+              onClick={handleFetchPropertyData}
+              disabled={
+                isFetching ||
+                !propertyAddress ||
+                !propertyCity ||
+                !propertyState ||
+                !propertyZip
+              }
+              variant='outline'
+            >
+              {isFetching ? (
+                <>
+                  <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                  Fetching...
+                </>
+              ) : fetchAttempted && autoFilledFields.size > 0 ? (
+                <>
+                  <CheckCircle2 className='mr-2 h-4 w-4 text-green-600' />
+                  Fetched
+                </>
+              ) : (
+                'Auto-Fill Data'
+              )}
+            </Button>
+            {isMounted && autoFilledFields.size > 0 && (
+              <Button
+                type='button'
+                onClick={() => {
+                  // Clear all auto-filled fields
+                  if (autoFilledFields.has('lot_size_sqft')) {
+                    form.setValue('lot_size_sqft', null as any, {
+                      shouldValidate: false,
+                    });
+                    form.setValue('lot_size_acres', null as any, {
+                      shouldValidate: false,
+                    });
+                    // Force re-render by resetting the form state
+                    form.resetField('lot_size_sqft', {
+                      defaultValue: undefined,
+                    });
+                    form.resetField('lot_size_acres', {
+                      defaultValue: undefined,
+                    });
+                  }
+                  if (autoFilledFields.has('zoning_description')) {
+                    form.setValue('zoning_description', '', {
+                      shouldValidate: false,
+                    });
+                    form.resetField('zoning_description', { defaultValue: '' });
+                  }
+                  setAutoFilledFields(new Set());
+                  setParcelInfo(null);
+                  setFetchAttempted(false);
+                  setAdditionalAddressErrors(new Map());
+                  toast.success('Cleared all auto-filled data');
+                }}
+                variant='ghost'
+                size='sm'
+              >
+                Clear All
+              </Button>
             )}
-          </Button>
+          </div>
         </div>
 
         {/* Parcel/Lot Information Display - Simple */}
@@ -655,6 +776,352 @@ export function Section2PropertyDetails({
         {/* Coordinates - Will be set by map picker later (no hidden inputs needed) */}
       </div>
 
+      {/* FORM ENHANCEMENT: Debt & Restrictions */}
+      <div className='pt-6 border-t'>
+        <h3 className='text-lg font-semibold mb-4'>
+          Property Debt & Restrictions
+        </h3>
+
+        {/* Has Property Debt */}
+        <div className='space-y-4'>
+          <FormField
+            control={form.control}
+            name='has_property_debt'
+            render={({ field }) => (
+              <FormItem className='flex flex-row items-start space-x-3 space-y-0'>
+                <FormControl>
+                  <input
+                    type='checkbox'
+                    checked={field.value || false}
+                    onChange={(e) => field.onChange(e.target.checked)}
+                    className='h-4 w-4 rounded border-gray-300 mt-1'
+                  />
+                </FormControl>
+                <div className='space-y-1 leading-none'>
+                  <FormLabel>Property has outstanding debt or liens</FormLabel>
+                  <FormDescription>
+                    Check if there are mortgages, liens, or other debts on the
+                    property
+                  </FormDescription>
+                </div>
+              </FormItem>
+            )}
+          />
+
+          {/* Conditional: Property Debt Amount */}
+          {form.watch('has_property_debt') && (
+            <>
+              <FormField
+                control={form.control}
+                name='property_debt_amount'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      Debt Amount <span className='text-red-500'>*</span>
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        type='number'
+                        placeholder='e.g., 500000'
+                        {...field}
+                        value={
+                          field.value === undefined ||
+                          field.value === null ||
+                          isNaN(field.value)
+                            ? ''
+                            : String(field.value)
+                        }
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          field.onChange(val === '' ? undefined : Number(val));
+                        }}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Total debt amount in dollars
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='property_debt_terms'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Debt Terms</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder='e.g., 15-year mortgage at 4.5% interest, $3,200/month payment...'
+                        className='min-h-[80px]'
+                        {...field}
+                        value={field.value ?? ''}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Describe the terms, interest rate, and payment schedule
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </>
+          )}
+        </div>
+
+        {/* Has Transfer Restrictions */}
+        <div className='space-y-4 mt-4'>
+          <FormField
+            control={form.control}
+            name='has_transfer_restrictions'
+            render={({ field }) => (
+              <FormItem className='flex flex-row items-start space-x-3 space-y-0'>
+                <FormControl>
+                  <input
+                    type='checkbox'
+                    checked={field.value || false}
+                    onChange={(e) => field.onChange(e.target.checked)}
+                    className='h-4 w-4 rounded border-gray-300 mt-1'
+                  />
+                </FormControl>
+                <div className='space-y-1 leading-none'>
+                  <FormLabel>Property has transfer restrictions</FormLabel>
+                  <FormDescription>
+                    Check if there are deed restrictions, covenants, or
+                    denominational requirements
+                  </FormDescription>
+                </div>
+              </FormItem>
+            )}
+          />
+
+          {/* Conditional: Transfer Restrictions Description */}
+          {form.watch('has_transfer_restrictions') && (
+            <FormField
+              control={form.control}
+              name='transfer_restrictions_description'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>
+                    Restrictions Description{' '}
+                    <span className='text-red-500'>*</span>
+                  </FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder='Describe the transfer restrictions, covenants, or approval requirements...'
+                      className='min-h-[80px]'
+                      {...field}
+                      value={field.value ?? ''}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
+        </div>
+
+        {/* Has Long-Term Leases */}
+        <div className='space-y-4 mt-4'>
+          <FormField
+            control={form.control}
+            name='has_long_term_leases'
+            render={({ field }) => (
+              <FormItem className='flex flex-row items-start space-x-3 space-y-0'>
+                <FormControl>
+                  <input
+                    type='checkbox'
+                    checked={field.value || false}
+                    onChange={(e) => field.onChange(e.target.checked)}
+                    className='h-4 w-4 rounded border-gray-300 mt-1'
+                  />
+                </FormControl>
+                <div className='space-y-1 leading-none'>
+                  <FormLabel>
+                    Property has long-term leases or commitments
+                  </FormLabel>
+                  <FormDescription>
+                    Check if there are existing leases or commitments that
+                    extend beyond 1 year
+                  </FormDescription>
+                </div>
+              </FormItem>
+            )}
+          />
+
+          {/* Conditional: Long-Term Leases Description */}
+          {form.watch('has_long_term_leases') && (
+            <FormField
+              control={form.control}
+              name='long_term_leases_description'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>
+                    Leases Description <span className='text-red-500'>*</span>
+                  </FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder='Describe the leases, tenants, terms, and expiration dates...'
+                      className='min-h-[80px]'
+                      {...field}
+                      value={field.value ?? ''}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* FORM ENHANCEMENT: Project Vision */}
+      <div className='pt-6 border-t'>
+        <h3 className='text-lg font-semibold mb-4'>Project Vision</h3>
+
+        {/* Project Components Wanted */}
+        <FormField
+          control={form.control}
+          name='project_components_wanted'
+          render={({ field }) => {
+            const PROJECT_COMPONENTS = [
+              {
+                value: 'affordable_housing',
+                label: 'Affordable Housing Units',
+              },
+              { value: 'senior_housing', label: 'Senior Housing' },
+              { value: 'family_housing', label: 'Family Housing' },
+              { value: 'new_sanctuary', label: 'New/Renovated Sanctuary' },
+              { value: 'fellowship_hall', label: 'Fellowship Hall' },
+              { value: 'offices', label: 'Church Offices' },
+              { value: 'classrooms', label: 'Classrooms/Meeting Rooms' },
+              { value: 'parking', label: 'Parking Structure' },
+              { value: 'community_space', label: 'Community Space' },
+            ];
+            return (
+              <FormItem>
+                <FormLabel>
+                  What would you like to include in the development?
+                </FormLabel>
+                <FormDescription>
+                  Select all components you'd like to see in the project
+                </FormDescription>
+                <FormControl>
+                  <Select
+                    value={field.value?.[0] || ''}
+                    onValueChange={(value) => {
+                      const currentValue = field.value || [];
+                      if (value && !currentValue.includes(value)) {
+                        field.onChange([...currentValue, value]);
+                      }
+                    }}
+                  >
+                    <SelectTrigger className='h-10'>
+                      <SelectValue placeholder='Make a selection'>
+                        {field.value && field.value.length > 0
+                          ? `${field.value.length} selected`
+                          : 'Make a selection'}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PROJECT_COMPONENTS.map((item) => {
+                        const isSelected = field.value?.includes(item.value);
+                        return (
+                          <SelectItem
+                            key={item.value}
+                            value={item.value}
+                            className={isSelected ? 'bg-accent' : ''}
+                            onSelect={(e) => {
+                              e.preventDefault();
+                              const currentValue = field.value || [];
+                              if (isSelected) {
+                                field.onChange(
+                                  currentValue.filter(
+                                    (v: string) => v !== item.value,
+                                  ),
+                                );
+                              } else {
+                                field.onChange([...currentValue, item.value]);
+                              }
+                            }}
+                          >
+                            {item.label}
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                </FormControl>
+                {field.value && field.value.length > 0 && (
+                  <div className='flex flex-wrap gap-1 mt-2'>
+                    {field.value.map((value: string) => {
+                      const item = PROJECT_COMPONENTS.find(
+                        (opt) => opt.value === value,
+                      );
+                      return (
+                        <Badge
+                          key={value}
+                          variant='secondary'
+                          className='text-xs'
+                        >
+                          {item?.label}
+                          <button
+                            type='button'
+                            onClick={() => {
+                              field.onChange(
+                                field.value.filter((v: string) => v !== value),
+                              );
+                            }}
+                            className='ml-1 hover:text-destructive'
+                          >
+                            ×
+                          </button>
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                )}
+                <FormMessage />
+              </FormItem>
+            );
+          }}
+        />
+
+        {/* Sunday Parking Needed */}
+        <FormField
+          control={form.control}
+          name='sunday_parking_needed'
+          render={({ field }) => (
+            <FormItem className='mt-4'>
+              <FormLabel>Parking Spaces Needed on Sundays</FormLabel>
+              <FormControl>
+                <Input
+                  type='number'
+                  placeholder='e.g., 50'
+                  {...field}
+                  value={
+                    field.value === undefined ||
+                    field.value === null ||
+                    isNaN(field.value)
+                      ? ''
+                      : String(field.value)
+                  }
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    field.onChange(val === '' ? undefined : Number(val));
+                  }}
+                />
+              </FormControl>
+              <FormDescription>
+                How many parking spaces do you need for Sunday services?
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      </div>
+
       {/* Property Improvement Needs */}
       <div>
         <h3 className='text-lg font-semibold mb-4'>
@@ -698,7 +1165,7 @@ export function Section2PropertyDetails({
                                 const newValue = checked.target.checked
                                   ? [...currentValue, item.value]
                                   : currentValue.filter(
-                                      (value: string) => value !== item.value
+                                      (value: string) => value !== item.value,
                                     );
                                 field.onChange(newValue);
                               }}
@@ -743,6 +1210,59 @@ export function Section2PropertyDetails({
           </FormItem>
         )}
       />
+
+      {/* Format Examples Dialog */}
+      <Dialog open={showFormatDialog} onOpenChange={setShowFormatDialog}>
+        <DialogContent className='sm:max-w-[500px]'>
+          <DialogHeader>
+            <DialogTitle className='text-xl'>
+              Address Format Examples
+            </DialogTitle>
+            <DialogDescription className='text-base'>
+              Multiple parcels can be entered in the address field using these
+              formats:
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className='space-y-4 py-4'>
+            <div className='space-y-3'>
+              <div className='p-3 bg-muted rounded-md'>
+                <p className='text-base font-mono'>
+                  10304-10312 S. Central Avenue
+                </p>
+              </div>
+              <div className='p-3 bg-muted rounded-md'>
+                <p className='text-base font-mono'>
+                  10304, 10306, 10308 S. Central Avenue
+                </p>
+              </div>
+              <div className='p-3 bg-muted rounded-md'>
+                <p className='text-base font-mono'>
+                  10304/10306/10308 S. Central Avenue
+                </p>
+              </div>
+              <div className='p-3 bg-muted rounded-md'>
+                <p className='text-base font-mono'>
+                  Parcels 10304-10312 S. Central Avenue
+                </p>
+              </div>
+            </div>
+
+            <div className='border-t pt-4'>
+              <p className='text-base text-muted-foreground'>
+                💡 <strong>Tip:</strong> For separate parcels with different
+                street addresses, click the{' '}
+                <strong>"Add Additional Address"</strong> button below the
+                primary address.
+              </p>
+            </div>
+          </div>
+
+          <Button onClick={() => setShowFormatDialog(false)} className='w-full'>
+            Got it
+          </Button>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

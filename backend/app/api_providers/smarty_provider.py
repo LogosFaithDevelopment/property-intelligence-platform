@@ -186,7 +186,10 @@ class SmartyProvider:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.get(url, params=params)
                 
+                logger.info(f"Enrichment API status: {response.status_code}")
+                
                 if response.status_code == 402:
+                    logger.warning(f"Enrichment API 402: {response.text[:200]}")
                     return {
                         'success': False,
                         'error': "Payment required - Smarty subscription inactive",
@@ -194,6 +197,7 @@ class SmartyProvider:
                     }
                 
                 if response.status_code != 200:
+                    logger.warning(f"Enrichment API {response.status_code}: {response.text[:200]}")
                     return {
                         'success': False,
                         'error': f"Enrichment API error: {response.status_code}",
@@ -201,6 +205,7 @@ class SmartyProvider:
                     }
                 
                 data = response.json()
+                logger.info(f"Enrichment API response data type: {type(data)}, length: {len(data) if isinstance(data, list) else 'N/A'}")
                 
                 # Response is a list with one item containing attributes
                 if isinstance(data, list) and len(data) > 0:

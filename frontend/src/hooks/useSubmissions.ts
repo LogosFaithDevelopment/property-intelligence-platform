@@ -28,7 +28,7 @@ function cleanFormData<T extends Record<string, any>>(data: T): T {
  * Convert congregation size range string to approximate number
  */
 function congregationSizeToNumber(
-  sizeRange: string | number | undefined
+  sizeRange: string | number | undefined,
 ): number | undefined {
   if (!sizeRange) return undefined;
   if (typeof sizeRange === 'number') return sizeRange;
@@ -49,7 +49,7 @@ function congregationSizeToNumber(
  * The backend /api/v1/submissions/ endpoint expects nested church/property/assessment structure
  */
 function transformFormDataToApiPayload(
-  formData: ChurchSubmissionFormData
+  formData: ChurchSubmissionFormData,
 ): any {
   // Clean the form data first
   const cleaned = cleanFormData(formData);
@@ -81,6 +81,14 @@ function transformFormDataToApiPayload(
       // Organization Details
       congregation_size: congregationSizeToNumber(cleaned.congregation_size), // Convert range to number
       annual_budget: cleaned.annual_budget,
+
+      // FORM ENHANCEMENT: New Church Fields
+      denominational_affiliation: cleaned.denominational_affiliation,
+      member_count: cleaned.member_count,
+      building_condition: cleaned.building_condition,
+      site_condition_issues: cleaned.site_condition_issues,
+      exploration_reasons: cleaned.exploration_reasons,
+      ministries_using_property: cleaned.ministries_using_property,
 
       // Partnership Preferences
       partnership_goals: cleaned.special_requirements,
@@ -134,6 +142,28 @@ function transformFormDataToApiPayload(
       // Available Build Space (NEW FIELDS)
       available_build_sqft: cleaned.available_build_sqft,
       build_area_notes: cleaned.build_area_notes,
+
+      // FORM ENHANCEMENT: Debt & Restrictions
+      has_property_debt: cleaned.has_property_debt,
+      property_debt_amount: cleaned.property_debt_amount,
+      property_debt_terms: cleaned.property_debt_terms,
+      has_transfer_restrictions: cleaned.has_transfer_restrictions,
+      transfer_restrictions_description:
+        cleaned.transfer_restrictions_description,
+      has_long_term_leases: cleaned.has_long_term_leases,
+      long_term_leases_description: cleaned.long_term_leases_description,
+
+      // FORM ENHANCEMENT: Project Vision
+      project_components_wanted: cleaned.project_components_wanted,
+      sunday_parking_needed: cleaned.sunday_parking_needed,
+
+      // FORM ENHANCEMENT: Partnership & Timeline
+      partnership_structure_preferences:
+        cleaned.partnership_structure_preferences,
+      decision_making_structure: cleaned.decision_making_structure,
+      timeline_preference_new: cleaned.timeline_preference_new,
+      reinvestment_preference: cleaned.reinvestment_preference,
+      priority_ranking: cleaned.priority_ranking,
 
       // Property Improvement & Financing Needs
       property_improvement_needs: cleaned.property_improvement_needs,
@@ -262,7 +292,7 @@ export const useUpdateSubmissionStatus = () => {
         {
           status,
           notes,
-        }
+        },
       );
       return data;
     },
@@ -283,7 +313,7 @@ export const useGenerateReport = () => {
         `/api/v1/reports/assessment/${assessmentId}/download-v2`,
         {
           responseType: 'blob',
-        }
+        },
       );
       return data;
     },
