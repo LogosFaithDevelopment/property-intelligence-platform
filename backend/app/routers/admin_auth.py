@@ -10,9 +10,9 @@ from typing import Optional
 
 from app.database import get_db
 from app.models.admin_user import AdminRole, AdminUser
-from app.schemas.admin import AdminUserResponse
+from app.schemas.admin import AdminUserResponse, CreateAdminUserRequest
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -235,3 +235,79 @@ async def update_admin_user(
     await db.refresh(user)
     
     return AdminUserResponse.from_orm(user)
+
+
+@router.post("/auth/users", response_model=AdminUserResponse, status_code=status.HTTP_201_CREATED)
+async def create_admin_user(
+    user_data: CreateAdminUserRequest,
+    current_user: AdminUser = Depends(require_role(AdminRole.SUPERADMIN)),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Create a new admin user (Superadmin only).
+    Uses ON CONFLICT to handle duplicates - will update existing users.
+    Replaces the CLI tool for adding admin users.
+    """
+    # Check if user already exists
+    result = await db.execute(
+        select(AdminUser).where(AdminUser.clerk_user_id == user_data.clerk_user_id)
+    )
+    existing_user = result.scalar_one_or_none()
+    
+    if existing_user:
+        # Update existing user
+        existing_user.email = user_data.email
+        existing_user.role = user_data.role
+        existing_user.full_name = user_data.full_name or user_data.email.split('@')[0]
+        existing_user.is_active = True
+        await db.commit()
+        await db.refresh(existing_user)
+        return AdminUserResponse.from_orm(existing_user)
+    else:
+        # Create new user
+        new_user = AdminUser(
+            clerk_user_id=user_data.clerk_user_id,
+            email=user_data.email,
+            role=user_data.role,
+            full_name=user_data.full_name or user_data.email.split('@')[0],
+            is_active=True
+        )
+        db.add(new_user)
+        await db.commit()
+        await db.refresh(new_user)
+        return AdminUserResponse.from_orm(new_user)
+
+
+@router.delete("/auth/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_admin_user(
+    user_id: int,
+    current_user: AdminUser = Depends(require_role(AdminRole.SUPERADMIN)),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Permanently delete an admin user (Superadmin only).
+    Cannot delete your own account.
+    """
+    result = await db.execute(
+        select(AdminUser).where(AdminUser.id == user_id)
+    )
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Admin user not found"
+        )
+    
+    # Prevent self-deletion
+    if user.id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot delete your own account"
+        )
+    
+    # Delete the user
+    await db.delete(user)
+    await db.commit()
+    
+    return None

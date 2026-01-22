@@ -1,10 +1,10 @@
 # Property Intelligence Platform
 
-> AI-powered platform connecting churches with affordable housing developers through intelligent property evaluation and investment-grade reporting.
+> AI-powered platform connecting organizations with affordable housing development through intelligent property evaluation and investment-grade reporting.
 
 **Production Site:** [logos.lotspecs.com](https://logos.lotspecs.com)  
 **Status:** Production Ready - November 13th 2025  
-**Client:** Logos Faith Development
+**Owner:** Logos Faith Development
 
 ---
 

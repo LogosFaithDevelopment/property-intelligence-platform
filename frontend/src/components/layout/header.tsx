@@ -32,7 +32,7 @@ export function Header() {
           </Link>
 
           {/* Navigation */}
-          <nav className='hidden md:flex items-center space-x-8'>
+          {/* <nav className='hidden md:flex items-center space-x-8'>
             <Link
               href='/submit-property'
               className='text-gray-700 hover:text-blue-600 transition-colors'
@@ -51,7 +51,7 @@ export function Header() {
             >
               How It Works
             </Link>
-          </nav>
+          </nav> */}
 
           {/* User Menu */}
           <div className='flex items-center'>

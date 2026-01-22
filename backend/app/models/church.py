@@ -6,7 +6,7 @@ Represents faith-based organizations and their details
 import enum
 
 from app.models.base import BaseModel, SoftDeleteMixin, UUIDMixin
-from sqlalchemy import (Boolean, Column, DateTime, Enum, Float, Integer,
+from sqlalchemy import (JSON, Boolean, Column, DateTime, Enum, Float, Integer,
                         String, Text)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -18,6 +18,25 @@ class ChurchStatus(str, enum.Enum):
     VERIFIED = "verified" 
     REJECTED = "rejected"
     SUSPENDED = "suspended"
+
+
+class DenominationalAffiliation(str, enum.Enum):
+    """Denominational affiliation options"""
+    NON_DENOMINATIONAL = "non_denominational"
+    AME = "ame"
+    BAPTIST = "baptist"
+    COGIC = "cogic"
+    UMC = "umc"
+    OTHER = "other"
+
+
+class BuildingCondition(str, enum.Enum):
+    """Current building condition rating"""
+    EXCELLENT = "excellent"
+    GOOD = "good"
+    FAIR = "fair"
+    POOR = "poor"
+    VERY_POOR = "very_poor"
 
 
 class Church(BaseModel, UUIDMixin, SoftDeleteMixin):
@@ -32,7 +51,9 @@ class Church(BaseModel, UUIDMixin, SoftDeleteMixin):
     name = Column(String(255), nullable=False, index=True)
     legal_name = Column(String(255), nullable=True)  # Official legal name if different
     denomination = Column(String(100), nullable=True)
+    denominational_affiliation = Column(Enum(DenominationalAffiliation, native_enum=True, values_callable=lambda x: [e.value for e in x]), nullable=True)  # NEW: Structured denomination
     founded_year = Column(Integer, nullable=True)
+    member_count = Column(Integer, nullable=True)  # NEW: Number of church members
     
     # Tax-Exempt Status
     tax_exempt_id = Column(String(50), nullable=True, unique=True)  # EIN or other tax ID
@@ -61,6 +82,12 @@ class Church(BaseModel, UUIDMixin, SoftDeleteMixin):
     # Programs and Services
     community_programs = Column(Text, nullable=True)  # JSON string of programs
     current_ministries = Column(Text, nullable=True)  # Current ministry activities
+    ministries_using_property = Column(Text, nullable=True)  # NEW: Which ministries use the property
+    
+    # Property Condition & Site Assessment (NEW)
+    building_condition = Column(Enum(BuildingCondition, native_enum=True, values_callable=lambda x: [e.value for e in x]), nullable=True)  # Current building condition rating
+    site_condition_issues = Column(JSON, nullable=True)  # Array: ["deferred_maintenance", "code_violations", "structural_issues", "environmental_concerns"]
+    exploration_reasons = Column(JSON, nullable=True)  # Array: ["create_housing", "replace_facilities", "financial_sustainability", "utilize_land", "other"]
     
     # Development Experience
     previous_development_experience = Column(Boolean, default=False, nullable=False)

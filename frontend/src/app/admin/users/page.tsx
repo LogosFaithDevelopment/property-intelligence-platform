@@ -12,8 +12,35 @@ import apiClient from '@/lib/api-client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Shield, Users, Crown, Eye, Loader2 } from 'lucide-react';
+import {
+  Shield,
+  Users,
+  Crown,
+  Eye,
+  Loader2,
+  Plus,
+  X,
+  Trash2,
+} from 'lucide-react';
 import { toast } from 'sonner';
+import { useState } from 'react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 interface AdminUser {
   id: number;
@@ -30,6 +57,32 @@ export default function AdminUsersPage() {
   const { role } = useAdminAuth();
   const { getToken } = useAuth();
   const queryClient = useQueryClient();
+
+  // Dialog state
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<AdminUser | null>(null);
+  const [formData, setFormData] = useState({
+    clerk_user_id: '',
+    email: '',
+    role: 'admin' as 'superadmin' | 'admin' | 'viewer',
+    full_name: '',
+  });
+
+  // Fetch current user info
+  const { data: currentUser } = useQuery<AdminUser>({
+    queryKey: ['current-admin-user'],
+    queryFn: async () => {
+      const token = await getToken();
+      const { data } = await apiClient.get('/api/v1/admin/auth/me', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      return data;
+    },
+    enabled: role === 'superadmin',
+  });
 
   // Fetch all admin users
   const { data: adminUsers, isLoading } = useQuery<AdminUser[]>({
@@ -57,7 +110,7 @@ export default function AdminUsersPage() {
           headers: {
             Authorization: `Bearer ${token}`,
           },
-        }
+        },
       );
     },
     onSuccess: () => {
@@ -68,6 +121,78 @@ export default function AdminUsersPage() {
       toast.error('Failed to update admin user');
     },
   });
+
+  // Create admin user mutation
+  const createAdminMutation = useMutation({
+    mutationFn: async (data: typeof formData) => {
+      const token = await getToken();
+      await apiClient.post(
+        '/api/v1/admin/auth/users',
+        {
+          clerk_user_id: data.clerk_user_id,
+          email: data.email,
+          role: data.role,
+          full_name: data.full_name || null,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+      toast.success('Admin user created successfully');
+      setIsCreateDialogOpen(false);
+      setFormData({
+        clerk_user_id: '',
+        email: '',
+        role: 'admin',
+        full_name: '',
+      });
+    },
+    onError: (error: any) => {
+      toast.error(
+        error?.response?.data?.detail || 'Failed to create admin user',
+      );
+    },
+  });
+
+  // Delete admin user mutation
+  const deleteAdminMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const token = await getToken();
+      await apiClient.delete(`/api/v1/admin/auth/users/${id}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+      toast.success('Admin user deleted successfully');
+      setDeleteConfirmOpen(false);
+      setUserToDelete(null);
+    },
+    onError: (error: any) => {
+      toast.error(
+        error?.response?.data?.detail || 'Failed to delete admin user',
+      );
+    },
+  });
+
+  const handleCreateSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // Validate required fields
+    if (!formData.clerk_user_id || !formData.email) {
+      toast.error('Clerk User ID and Email are required');
+      return;
+    }
+
+    createAdminMutation.mutate(formData);
+  };
 
   // Redirect if not superadmin
   if (role !== 'superadmin') {
@@ -128,9 +253,20 @@ export default function AdminUsersPage() {
   return (
     <div className='max-w-5xl mx-auto'>
       {/* Header */}
-      <div className='mb-8'>
-        <h1 className='text-3xl font-bold mb-2'>Admin Users</h1>
-        <p className='text-gray-600'>Manage admin user roles and permissions</p>
+      <div className='mb-8 flex justify-between items-start'>
+        <div>
+          <h1 className='text-3xl font-bold mb-2'>Admin Users</h1>
+          <p className='text-gray-600'>
+            Manage admin user roles and permissions
+          </p>
+        </div>
+        <Button
+          onClick={() => setIsCreateDialogOpen(true)}
+          className='flex items-center gap-2'
+        >
+          <Plus className='h-4 w-4' />
+          Add Admin User
+        </Button>
       </div>
 
       {/* Info Card */}
@@ -248,20 +384,33 @@ export default function AdminUsersPage() {
                     </div>
                   </div>
 
-                  <div>
-                    {user.role !== 'superadmin' && (
-                      <Button
-                        variant='outline'
-                        size='sm'
-                        onClick={() =>
-                          toggleActiveMutation.mutate({
-                            id: user.id,
-                            isActive: user.is_active,
-                          })
-                        }
-                      >
-                        {user.is_active ? 'Deactivate' : 'Activate'}
-                      </Button>
+                  <div className='flex gap-2'>
+                    {currentUser && user.id !== currentUser.id && (
+                      <>
+                        <Button
+                          variant='outline'
+                          size='sm'
+                          onClick={() =>
+                            toggleActiveMutation.mutate({
+                              id: user.id,
+                              isActive: user.is_active,
+                            })
+                          }
+                        >
+                          {user.is_active ? 'Deactivate' : 'Activate'}
+                        </Button>
+                        <Button
+                          variant='outline'
+                          size='sm'
+                          className='text-red-600 hover:text-red-700 hover:bg-red-50'
+                          onClick={() => {
+                            setUserToDelete(user);
+                            setDeleteConfirmOpen(true);
+                          }}
+                        >
+                          <Trash2 className='h-4 w-4' />
+                        </Button>
+                      </>
                     )}
                   </div>
                 </div>
@@ -271,24 +420,173 @@ export default function AdminUsersPage() {
         </CardContent>
       </Card>
 
-      {/* CLI Instructions */}
-      <Card className='mt-6'>
-        <CardHeader>
-          <CardTitle className='text-sm'>Add New Admin User</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className='text-sm text-gray-600 mb-3'>
-            To add a new admin user, use the CLI tool:
-          </p>
-          <pre className='bg-gray-100 p-3 rounded text-xs overflow-x-auto'>
-            python backend/assign_admin_role.py &lt;clerk_user_id&gt;
-            &lt;email&gt; &lt;role&gt; [full_name]
-          </pre>
-          <p className='text-xs text-gray-500 mt-2'>
-            Roles: superadmin, admin, viewer
-          </p>
-        </CardContent>
-      </Card>
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <DialogContent className='sm:max-w-[425px]'>
+          <DialogHeader>
+            <DialogTitle>Delete Admin User</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to permanently delete this admin user? This
+              action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+
+          {userToDelete && (
+            <div className='py-4'>
+              <div className='bg-gray-50 p-4 rounded-lg'>
+                <p className='text-sm font-medium'>{userToDelete.full_name}</p>
+                <p className='text-sm text-gray-600'>{userToDelete.email}</p>
+                <Badge
+                  className={`mt-2 ${getRoleBadgeClass(userToDelete.role)}`}
+                >
+                  {getRoleIcon(userToDelete.role)}
+                  <span className='ml-1 capitalize'>{userToDelete.role}</span>
+                </Badge>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant='outline'
+              onClick={() => {
+                setDeleteConfirmOpen(false);
+                setUserToDelete(null);
+              }}
+              disabled={deleteAdminMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant='destructive'
+              onClick={() =>
+                userToDelete && deleteAdminMutation.mutate(userToDelete.id)
+              }
+              disabled={deleteAdminMutation.isPending}
+            >
+              {deleteAdminMutation.isPending ? (
+                <>
+                  <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                  Deleting...
+                </>
+              ) : (
+                'Delete User'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Admin User Dialog */}
+      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+        <DialogContent className='sm:max-w-[500px]'>
+          <DialogHeader>
+            <DialogTitle>Add Admin User</DialogTitle>
+            <DialogDescription>
+              Create a new admin user. Get the Clerk User ID from your Clerk
+              dashboard.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleCreateSubmit}>
+            <div className='grid gap-4 py-4'>
+              <div className='grid gap-2'>
+                <Label htmlFor='clerk_user_id'>
+                  Clerk User ID <span className='text-red-500'>*</span>
+                </Label>
+                <Input
+                  id='clerk_user_id'
+                  placeholder='user_2abc123xyz...'
+                  value={formData.clerk_user_id}
+                  onChange={(e) =>
+                    setFormData({ ...formData, clerk_user_id: e.target.value })
+                  }
+                  required
+                />
+                <p className='text-xs text-gray-500'>
+                  Find this in your Clerk dashboard under Users
+                </p>
+              </div>
+
+              <div className='grid gap-2'>
+                <Label htmlFor='email'>
+                  Email <span className='text-red-500'>*</span>
+                </Label>
+                <Input
+                  id='email'
+                  type='email'
+                  placeholder='admin@example.com'
+                  value={formData.email}
+                  onChange={(e) =>
+                    setFormData({ ...formData, email: e.target.value })
+                  }
+                  required
+                />
+              </div>
+
+              <div className='grid gap-2'>
+                <Label htmlFor='role'>
+                  Role <span className='text-red-500'>*</span>
+                </Label>
+                <Select
+                  value={formData.role}
+                  onValueChange={(value: 'superadmin' | 'admin' | 'viewer') =>
+                    setFormData({ ...formData, role: value })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value='viewer'>
+                      Viewer - Read-only access
+                    </SelectItem>
+                    <SelectItem value='admin'>
+                      Admin - Review & manage submissions
+                    </SelectItem>
+                    <SelectItem value='superadmin'>
+                      Superadmin - Full system access
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className='grid gap-2'>
+                <Label htmlFor='full_name'>Full Name (Optional)</Label>
+                <Input
+                  id='full_name'
+                  placeholder='John Doe'
+                  value={formData.full_name}
+                  onChange={(e) =>
+                    setFormData({ ...formData, full_name: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button
+                type='button'
+                variant='outline'
+                onClick={() => setIsCreateDialogOpen(false)}
+                disabled={createAdminMutation.isPending}
+              >
+                Cancel
+              </Button>
+              <Button type='submit' disabled={createAdminMutation.isPending}>
+                {createAdminMutation.isPending ? (
+                  <>
+                    <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                    Creating...
+                  </>
+                ) : (
+                  'Create Admin User'
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

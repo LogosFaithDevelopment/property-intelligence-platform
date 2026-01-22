@@ -92,7 +92,7 @@ export default function AssessmentVisualizationPage({
           headers: {
             Authorization: `Bearer ${token}`,
           },
-        }
+        },
       );
 
       if (!response.ok) {
@@ -206,7 +206,7 @@ export default function AssessmentVisualizationPage({
       (sum: number, addr: any) => {
         return sum + (addr.lot_size_sqft || 0);
       },
-      0
+      0,
     );
     return mainLotSize + additionalLotSizes;
   })();
@@ -249,7 +249,7 @@ export default function AssessmentVisualizationPage({
                     headers: {
                       Authorization: `Bearer ${token}`,
                     },
-                  }
+                  },
                 );
 
                 if (response.ok) {
@@ -287,7 +287,7 @@ export default function AssessmentVisualizationPage({
           <div className='text-right'>
             <div
               className={`text-3xl sm:text-4xl md:text-5xl font-bold ${getStatusColor(
-                score
+                score,
               )}`}
             >
               {grade}
@@ -387,8 +387,16 @@ export default function AssessmentVisualizationPage({
                         7-Year IRR (Recommended Scenario)
                       </p>
                       <p className='text-4xl sm:text-5xl md:text-6xl font-bold text-green-700 mb-2'>
-                        {recommendedScenario.irr_percent?.toFixed(1)}%
+                        {recommendedScenario.irr_percent != null
+                          ? `${recommendedScenario.irr_percent.toFixed(1)}%`
+                          : 'N/A'}
                       </p>
+                      {recommendedScenario.irr_percent == null && (
+                        <p className='text-xs text-red-600 mb-2'>
+                          Negative exit proceeds - project not financially
+                          viable
+                        </p>
+                      )}
                       <p className='text-base text-gray-600'>
                         Target: 20% minimum • Exit Cap:{' '}
                         {(exitCapRate * 100).toFixed(2)}% • Rent Growth:{' '}
@@ -463,8 +471,10 @@ export default function AssessmentVisualizationPage({
                         <div className='flex items-start gap-2 text-sm text-gray-700'>
                           <CheckCircle className='h-4 w-4 text-green-600 flex-shrink-0 mt-0.5' />
                           <span>
-                            IRR: {recommendedScenario.irr_percent?.toFixed(1)}%{' '}
-                            {meetsTarget ? 'MEETS' : 'below'} 20% target
+                            IRR:{' '}
+                            {recommendedScenario.irr_percent != null
+                              ? `${recommendedScenario.irr_percent.toFixed(1)}% ${meetsTarget ? 'MEETS' : 'below'} 20% target`
+                              : 'N/A (negative exit proceeds)'}
                           </span>
                         </div>
                       </div>
@@ -999,7 +1009,7 @@ export default function AssessmentVisualizationPage({
                           <Info className='h-4 w-4 text-gray-400 flex-shrink-0 mt-0.5' />
                           <span>{assumption}</span>
                         </li>
-                      )
+                      ),
                     )}
                   </ul>
                 </div>
@@ -1322,8 +1332,8 @@ export default function AssessmentVisualizationPage({
                             isRecommended
                               ? 'border-green-500 bg-green-50'
                               : isNotRecommended
-                              ? 'border-red-300 bg-red-50'
-                              : 'border-gray-300 bg-white'
+                                ? 'border-red-300 bg-red-50'
+                                : 'border-gray-300 bg-white'
                           }`}
                         >
                           {isRecommended && (
@@ -1414,9 +1424,9 @@ export default function AssessmentVisualizationPage({
                                   isNotRecommended
                                     ? 'text-red-600'
                                     : typeof scenario.irr_percent ===
-                                        'number' && scenario.irr_percent >= 20
-                                    ? 'text-green-600'
-                                    : 'text-yellow-600'
+                                          'number' && scenario.irr_percent >= 20
+                                      ? 'text-green-600'
+                                      : 'text-yellow-600'
                                 }`}
                               >
                                 {typeof scenario.irr_percent === 'number'
@@ -1987,7 +1997,7 @@ export default function AssessmentVisualizationPage({
             (total: number, parcel: any) => {
               return total + (parcel?.building?.size_sqft || 0);
             },
-            0
+            0,
           );
         } else {
           combinedBuildingSize = buildingData?.size_sqft || 0;
@@ -2315,7 +2325,7 @@ export default function AssessmentVisualizationPage({
                                           </div>
                                         </div>
                                       </div>
-                                    )
+                                    ),
                                   )}
                                 </div>
                               )}
@@ -2424,8 +2434,8 @@ export default function AssessmentVisualizationPage({
                         floodData.risk_level === 'minimal'
                           ? 'bg-green-50 border-green-200'
                           : floodData.risk_level === 'moderate'
-                          ? 'bg-yellow-50 border-yellow-200'
-                          : 'bg-red-50 border-red-200'
+                            ? 'bg-yellow-50 border-yellow-200'
+                            : 'bg-red-50 border-red-200'
                       }`}
                     >
                       <p className='text-sm text-gray-600'>Flood Zone</p>
@@ -2439,8 +2449,8 @@ export default function AssessmentVisualizationPage({
                         floodData.risk_level === 'minimal'
                           ? 'bg-green-50 border-green-200'
                           : floodData.risk_level === 'moderate'
-                          ? 'bg-yellow-50 border-yellow-200'
-                          : 'bg-red-50 border-red-200'
+                            ? 'bg-yellow-50 border-yellow-200'
+                            : 'bg-red-50 border-red-200'
                       }`}
                     >
                       <p className='text-sm text-gray-600'>Risk Level</p>
@@ -2730,7 +2740,7 @@ export default function AssessmentVisualizationPage({
                         </p>
                       )}
                     </div>
-                  )
+                  ),
                 )}
               </div>
             </CardContent>

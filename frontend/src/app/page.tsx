@@ -13,6 +13,7 @@ import {
   DollarSign,
   Building2,
 } from 'lucide-react';
+import heroBackground from './logos-intel-hero.png';
 
 export default function HomePage() {
   const { isSignedIn, isLoaded } = useUser();
@@ -22,9 +23,28 @@ export default function HomePage() {
     <>
       {/* Role-based redirect now happens in middleware.ts - no flash! */}
 
-      <div className='fixed inset-0 overflow-hidden bg-gradient-to-b from-blue-50 to-white'>
+      <div className='fixed inset-0 overflow-hidden'>
+        {/* Hero Background Image */}
+        <div
+          className='absolute inset-0'
+          style={{ height: 'calc(100% - 100px)' }}
+        >
+          <Image
+            src={heroBackground}
+            alt='Hero Background'
+            fill
+            className='object-cover object-[50%_20%]'
+            priority
+          />
+          {/* Overlay for better text readability */}
+          <div className='absolute inset-0 bg-black/20' />
+        </div>
+
+        {/* White strip at bottom */}
+        <div className='absolute bottom-0 left-0 right-0 h-[100px] bg-white' />
+
         {/* Hero Section */}
-        <div className='container mx-auto px-4 h-full flex flex-col justify-center -mt-[70px] md:pt-0 md:-mt-16'>
+        <div className='container mx-auto px-4 h-full flex flex-col justify-center -mt-[120px] md:pt-0 md:-mt-32 relative z-10'>
           <nav className='flex justify-between items-center mb-4 md:mb-12 mt-[100px] md:mt-0'>
             <div className='flex-1 flex justify-center'>
               <Image
@@ -53,13 +73,13 @@ export default function HomePage() {
           </nav>
 
           <div className='max-w-4xl mx-auto text-center'>
-            <h1 className='text-3xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent max-w-[280px] md:max-w-none mx-auto'>
+            <h1 className='text-3xl md:text-6xl font-bold mb-6 text-white drop-shadow-lg max-w-[280px] md:max-w-none mx-auto'>
               Transforming Underutilized Land Into Housing
             </h1>
-            <p className='text-xl text-gray-600 mb-8'>
+            <p className='text-xl text-white drop-shadow-md mb-8'>
               We provide 100% private funding.
             </p>
-            <div className='flex gap-4 justify-center flex-wrap'>
+            <div className='flex justify-center'>
               {isLoaded && (
                 <>
                   {isSignedIn ? (
@@ -79,11 +99,6 @@ export default function HomePage() {
                   )}
                 </>
               )}
-              <Link href='/partner-with-us'>
-                <Button size='lg' variant='outline' className='text-lg px-8'>
-                  Learn More
-                </Button>
-              </Link>
             </div>
           </div>
         </div>

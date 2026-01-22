@@ -4,12 +4,34 @@ Request/response schemas for church-related endpoints
 """
 
 from datetime import datetime
+from enum import Enum
 from typing import List, Optional
 
-from app.models.church import ChurchStatus
+from app.models.church import (BuildingCondition, ChurchStatus,
+                               DenominationalAffiliation)
 from app.schemas.base import (AddressSchema, BaseSchema, TimestampMixin,
                               UUIDMixin)
 from pydantic import EmailStr, Field, HttpUrl, validator
+
+
+# Enum for Pydantic validation
+class DenominationalAffiliationEnum(str, Enum):
+    """Denominational affiliation options"""
+    NON_DENOMINATIONAL = "non_denominational"
+    AME = "ame"
+    BAPTIST = "baptist"
+    COGIC = "cogic"
+    UMC = "umc"
+    OTHER = "other"
+
+
+class BuildingConditionEnum(str, Enum):
+    """Building condition rating"""
+    EXCELLENT = "excellent"
+    GOOD = "good"
+    FAIR = "fair"
+    POOR = "poor"
+    VERY_POOR = "very_poor"
 
 
 class ChurchBase(BaseSchema):
@@ -18,7 +40,9 @@ class ChurchBase(BaseSchema):
     name: str = Field(..., min_length=3, max_length=255, description="Church name")
     legal_name: Optional[str] = Field(None, max_length=255, description="Legal organization name")
     denomination: Optional[str] = Field(None, max_length=100, description="Religious denomination")
+    denominational_affiliation: Optional[DenominationalAffiliationEnum] = Field(None, description="Structured denominational affiliation")
     founded_year: Optional[int] = Field(None, ge=1600, le=2024, description="Year church was founded")
+    member_count: Optional[int] = Field(None, ge=1, le=100000, description="Number of church members")
     
     # Contact Information
     primary_email: EmailStr = Field(..., description="Primary contact email")
@@ -58,8 +82,14 @@ class ChurchCreate(ChurchBase):
     # Programs and experience
     community_programs: Optional[str] = Field(None, description="Community programs offered")
     current_ministries: Optional[str] = Field(None, description="Current ministry activities")
+    ministries_using_property: Optional[str] = Field(None, description="Which ministries use the property")
     previous_development_experience: bool = Field(default=False, description="Has previous development experience")
     development_experience_notes: Optional[str] = Field(None, description="Details about development experience")
+    
+    # Property Condition & Site Assessment (NEW)
+    building_condition: Optional[BuildingConditionEnum] = Field(None, description="Current building condition rating")
+    site_condition_issues: Optional[List[str]] = Field(None, description="Site condition issues (deferred_maintenance, code_violations, structural_issues, environmental_concerns)")
+    exploration_reasons: Optional[List[str]] = Field(None, description="Reasons for exploring redevelopment (create_housing, replace_facilities, financial_sustainability, utilize_land, other)")
     
     # Partnership preferences
     partnership_goals: Optional[str] = Field(None, description="Goals for development partnership")
