@@ -110,6 +110,33 @@ async def get_current_user(
         )
 
 
+async def get_current_user_optional(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
+) -> Optional[CurrentUser]:
+    """
+    Extract and verify current user from JWT token (OPTIONAL)
+    
+    Same as get_current_user but returns None instead of raising exception
+    when no credentials are provided. Use this for endpoints that work
+    with or without authentication.
+    
+    Args:
+        credentials: HTTP Bearer token from request header (optional)
+        
+    Returns:
+        CurrentUser object with user_id, email, etc. or None if not authenticated
+    """
+    
+    if not credentials:
+        return None
+    
+    try:
+        return await get_current_user(credentials)
+    except HTTPException:
+        # If token is invalid, treat as unauthenticated
+        return None
+
+
 async def get_current_admin(
     current_user: CurrentUser = Depends(get_current_user)
 ) -> CurrentUser:
