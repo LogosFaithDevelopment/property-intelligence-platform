@@ -3,15 +3,8 @@
 import Link from 'next/link';
 import { CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useClerk } from '@clerk/nextjs';
 
 export default function SubmissionSuccessPage() {
-  const { signOut } = useClerk();
-
-  const handleReturnHome = async () => {
-    await signOut({ redirectUrl: '/' });
-  };
-
   return (
     <div className='flex min-h-screen items-center justify-center bg-gradient-to-br from-green-50 to-blue-50 px-4 py-12'>
       <div className='mx-auto max-w-2xl text-center'>
@@ -80,11 +73,8 @@ export default function SubmissionSuccessPage() {
 
         {/* Action Buttons */}
         <div className='flex flex-col gap-3 sm:flex-row sm:justify-center'>
-          {/* <Button asChild size='lg'>
-            <Link href='/submission-status'>Check Submission Status</Link>
-          </Button> */}
-          <Button variant='outline' size='lg' onClick={handleReturnHome}>
-            Return to Home
+          <Button asChild variant='outline' size='lg'>
+            <Link href='/'>Return to Home</Link>
           </Button>
         </div>
 
