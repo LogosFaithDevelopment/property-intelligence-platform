@@ -10,7 +10,7 @@ const isPublicRoute = createRouteMatcher([
   '/how-it-works',
   '/success-stories',
   '/faq',
-  // Note: /submit-property requires authentication to prevent spam/DDOS
+  '/submit-property', // Allow public property submissions
   '/submission-success',
   '/submission-status',
   '/api/health', // Health check endpoint for ELB - must be fast and not require auth
@@ -93,7 +93,7 @@ export default clerkMiddleware(async (auth, request) => {
     // Redirect based on role
     const redirectUrl = isAdmin ? '/admin/dashboard' : '/submit-property';
     const response = NextResponse.redirect(
-      new URL(redirectUrl, request.nextUrl.origin)
+      new URL(redirectUrl, request.nextUrl.origin),
     );
 
     // Update cache if needed
