@@ -7,7 +7,8 @@ import logging
 from typing import Optional
 
 from app.database import get_db
-from app.middleware.auth import CurrentUser, get_current_user
+from app.middleware.auth import (CurrentUser, get_current_user,
+                                 get_current_user_optional)
 from app.models.assessment import Assessment
 from app.models.church import Church, ChurchStatus
 from app.models.property import Property, PropertyType
@@ -74,7 +75,7 @@ async def create_submission(
     submission_data: SubmissionCreate,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: Optional[CurrentUser] = Depends(get_current_user_optional)
 ):
     """
     Create complete church property submission
@@ -87,8 +88,14 @@ async def create_submission(
     
     All operations are atomic - if any fail, none are committed.
     
-    Requires authentication to prevent spam and track ownership.
+    Authentication is optional - allows public form submissions.
     """
+    
+    # Log whether this is an authenticated submission
+    if current_user:
+        logger.info(f"Authenticated submission from user: {current_user.user_id}")
+    else:
+        logger.info("Anonymous public submission")
     
     try:
         # Start atomic transaction
@@ -118,7 +125,7 @@ async def create_submission(
                 church_data['website_url'] = str(church_data['website_url'])
             
             church = Church(**church_data)
-            church.user_id = current_user.user_id
+            church.user_id = current_user.user_id if current_user else None
             church.verification_status = ChurchStatus.PENDING
             
             db.add(church)
@@ -152,7 +159,7 @@ async def create_submission(
             
             property_obj = Property(
                 church_id=church.id,
-                user_id=current_user.user_id,
+                user_id=current_user.user_id if current_user else None,
                 **property_data
             )
             
