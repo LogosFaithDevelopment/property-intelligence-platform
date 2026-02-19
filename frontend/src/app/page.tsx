@@ -45,7 +45,7 @@ export default function HomePage() {
 
         {/* Hero Section */}
         <div className='container mx-auto px-4 h-full flex flex-col justify-center -mt-[120px] md:pt-0 md:-mt-32 relative z-10'>
-          <nav className='flex justify-between items-center mb-4 md:mb-12 mt-[100px] md:mt-0'>
+          <nav className='flex justify-between items-center mb-4 md:mb-12 mt-[100px] md:mt-[100px]'>
             <div className='flex-1 flex justify-center'>
               <Image
                 src='/home-logos.png'
@@ -56,18 +56,10 @@ export default function HomePage() {
               />
             </div>
             <div className='flex gap-4 absolute right-4 md:right-8 top-28 md:top-20'>
-              {isLoaded && (
-                <>
-                  {isSignedIn ? (
-                    <Button onClick={() => router.push('/submit-property')}>
-                      Submit Property
-                    </Button>
-                  ) : (
-                    <Link href='/sign-up'>
-                      <Button>Sign Up</Button>
-                    </Link>
-                  )}
-                </>
+              {isLoaded && !isSignedIn && (
+                <Link href='/sign-in'>
+                  <Button>Sign In</Button>
+                </Link>
               )}
             </div>
           </nav>
@@ -80,25 +72,11 @@ export default function HomePage() {
               We provide 100% private funding.
             </p>
             <div className='flex justify-center'>
-              {isLoaded && (
-                <>
-                  {isSignedIn ? (
-                    <Button
-                      size='lg'
-                      className='text-lg px-8'
-                      onClick={() => router.push('/submit-property')}
-                    >
-                      Submit Your Property
-                    </Button>
-                  ) : (
-                    <Link href='/sign-in'>
-                      <Button size='lg' className='text-lg px-8'>
-                        Submit Your Property for Review
-                      </Button>
-                    </Link>
-                  )}
-                </>
-              )}
+              <Link href='/submit-property'>
+                <Button size='lg' className='text-lg px-8'>
+                  Submit Your Property for Review
+                </Button>
+              </Link>
             </div>
           </div>
         </div>
